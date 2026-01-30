@@ -1,16 +1,12 @@
 // src/pages/TopicView.tsx
-// Widok pojedynczego tematu z notatkami
-
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { 
-  ChevronRight, Star, Pin, Edit, Trash2, Plus,
-  History, Link as LinkIcon, Paperclip, MoreVertical
+  ChevronRight, Star, Pin, Edit, Plus, MoreVertical
 } from 'lucide-react'
 import { useTopic, useNotes, useFavorites } from '../hooks/useKnowledgeBase'
 import NoteEditor from '../components/notes/NoteEditor'
 import NoteCard from '../components/notes/NoteCard'
-import AttachmentsList from '../components/attachments/AttachmentsList'
 import { formatDate } from '../utils/helpers'
 
 export default function TopicView() {
@@ -19,7 +15,6 @@ export default function TopicView() {
   const { createNote, updateNote, deleteNote } = useNotes(topicId!)
   const { toggleFavorite, isFavorite } = useFavorites()
   
-  const [isEditing, setIsEditing] = useState(false)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [showNewNote, setShowNewNote] = useState(false)
 
@@ -66,7 +61,6 @@ export default function TopicView() {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumbs */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
         <Link to="/" className="hover:text-cyan-400">Strona główna</Link>
         <ChevronRight className="w-4 h-4" />
@@ -85,7 +79,6 @@ export default function TopicView() {
         <span className="text-slate-200">{topic.title}</span>
       </nav>
 
-      {/* Topic Header */}
       <header className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
@@ -102,7 +95,6 @@ export default function TopicView() {
               <p className="text-slate-400 mb-4">{topic.description}</p>
             )}
 
-            {/* Tags */}
             {topic.tags && topic.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {topic.tags.map((tag: any) => (
@@ -121,7 +113,6 @@ export default function TopicView() {
               </div>
             )}
 
-            {/* Meta */}
             <div className="flex items-center gap-4 text-sm text-slate-500">
               <span>Utworzono: {formatDate(topic.created_at)}</span>
               <span>•</span>
@@ -131,7 +122,6 @@ export default function TopicView() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => toggleFavorite(topic.id)}
@@ -145,7 +135,6 @@ export default function TopicView() {
               <Star className="w-5 h-5" fill={favorite ? 'currentColor' : 'none'} />
             </button>
             <button
-              onClick={() => setIsEditing(true)}
               className="p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-700 transition-colors"
               title="Edytuj temat"
             >
@@ -161,7 +150,6 @@ export default function TopicView() {
         </div>
       </header>
 
-      {/* Notes Section */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-200">
@@ -176,7 +164,6 @@ export default function TopicView() {
           </button>
         </div>
 
-        {/* New Note Editor */}
         {showNewNote && (
           <div className="mb-4">
             <NoteEditor
@@ -186,7 +173,6 @@ export default function TopicView() {
           </div>
         )}
 
-        {/* Notes List */}
         {notes.length === 0 && !showNewNote ? (
           <div className="text-center py-12 bg-slate-800/30 border border-dashed border-slate-700 rounded-xl">
             <p className="text-slate-400 mb-4">Ten temat nie ma jeszcze żadnych notatek</p>
@@ -200,7 +186,7 @@ export default function TopicView() {
           </div>
         ) : (
           <div className="space-y-4">
-            {notes.map((note) => (
+            {notes.map((note: any) => (
               <NoteCard
                 key={note.id}
                 note={note}
