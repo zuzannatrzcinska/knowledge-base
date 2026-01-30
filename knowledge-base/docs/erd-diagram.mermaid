@@ -1,0 +1,135 @@
+erDiagram
+    users {
+        uuid id PK
+        varchar email UK
+        varchar full_name
+        text avatar_url
+        varchar role
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    categories {
+        uuid id PK
+        varchar name
+        text description
+        varchar icon
+        varchar color
+        uuid parent_id FK
+        int sort_order
+        uuid created_by FK
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    topics {
+        uuid id PK
+        varchar title
+        text description
+        uuid category_id FK
+        uuid created_by FK
+        boolean is_pinned
+        boolean is_archived
+        int view_count
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    notes {
+        uuid id PK
+        uuid topic_id FK
+        varchar title
+        text content
+        varchar content_type
+        int sort_order
+        uuid created_by FK
+        timestamp created_at
+        timestamp updated_at
+        tsvector search_vector
+    }
+    
+    tags {
+        uuid id PK
+        varchar name UK
+        varchar color
+        timestamp created_at
+    }
+    
+    note_tags {
+        uuid note_id FK,PK
+        uuid tag_id FK,PK
+    }
+    
+    topic_tags {
+        uuid topic_id FK,PK
+        uuid tag_id FK,PK
+    }
+    
+    attachments {
+        uuid id PK
+        uuid note_id FK
+        varchar file_name
+        text file_path
+        bigint file_size
+        varchar mime_type
+        text thumbnail_path
+        uuid uploaded_by FK
+        timestamp created_at
+    }
+    
+    note_links {
+        uuid id PK
+        uuid source_note_id FK
+        uuid target_note_id FK
+        varchar link_type
+        timestamp created_at
+    }
+    
+    note_history {
+        uuid id PK
+        uuid note_id FK
+        varchar title
+        text content
+        uuid changed_by FK
+        varchar change_type
+        timestamp created_at
+    }
+    
+    favorites {
+        uuid user_id FK,PK
+        uuid topic_id FK,PK
+        timestamp created_at
+    }
+    
+    recent_views {
+        uuid id PK
+        uuid user_id FK
+        uuid topic_id FK
+        timestamp viewed_at
+    }
+
+    %% Relacje
+    users ||--o{ categories : "tworzy"
+    users ||--o{ topics : "tworzy"
+    users ||--o{ notes : "tworzy"
+    users ||--o{ attachments : "uploaduje"
+    users ||--o{ note_history : "edytuje"
+    users ||--o{ favorites : "ma"
+    users ||--o{ recent_views : "przegląda"
+    
+    categories ||--o{ categories : "ma podkategorie"
+    categories ||--o{ topics : "zawiera"
+    
+    topics ||--o{ notes : "zawiera"
+    topics ||--o{ topic_tags : "ma"
+    topics ||--o{ favorites : "jest ulubione"
+    topics ||--o{ recent_views : "jest przeglądane"
+    
+    notes ||--o{ note_tags : "ma"
+    notes ||--o{ attachments : "ma"
+    notes ||--o{ note_links : "linkuje do (source)"
+    notes ||--o{ note_links : "jest linkowane (target)"
+    notes ||--o{ note_history : "ma historię"
+    
+    tags ||--o{ note_tags : "przypisane do"
+    tags ||--o{ topic_tags : "przypisane do"
