@@ -100,7 +100,7 @@ export function useTopics(categoryId?: string) {
     if (error) throw error
 
     // Dodaj tagi jeśli podane
-    if (tagIds && tagIds.length > 0) {
+    if (tagIds && tagIds.length > 0 && data) {
       await supabase
         .from('topic_tags')
         .insert(tagIds.map(tag_id => ({ topic_id: data.id, tag_id })))
@@ -171,7 +171,7 @@ export function useTopic(topicId: string) {
       if (notesError) throw notesError
 
       // Przekształć dane
-      const notesWithRelations = notesData?.map(note => ({
+      const notesWithRelations = notesData?.map((note: any) => ({
         ...note,
         tags: note.note_tags?.map((nt: any) => nt.tags).filter(Boolean) || [],
         attachments: note.attachments || []
@@ -179,16 +179,13 @@ export function useTopic(topicId: string) {
 
       setNotes(notesWithRelations)
 
-      // Zaktualizuj liczbę wyświetleń
-      await supabase.rpc('increment_view_count', { topic_id: topicId }).catch(() => {})
-      
       // Zapisz w ostatnio przeglądanych
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         await supabase
           .from('recent_views')
           .upsert({ user_id: user.id, topic_id: topicId, viewed_at: new Date().toISOString() })
-          .catch(() => {})
+          .select()
       }
 
     } catch (e) {
@@ -241,7 +238,7 @@ export function useNotes(topicId: string) {
     if (error) throw error
 
     // Dodaj tagi
-    if (tagIds && tagIds.length > 0) {
+    if (tagIds && tagIds.length > 0 && data) {
       await supabase
         .from('note_tags')
         .insert(tagIds.map(tag_id => ({ note_id: data.id, tag_id })))
@@ -357,27 +354,31 @@ export function useSearch() {
     
     try {
       const { data, error } = await supabase
-        .from('notes')
+        .from('note_tags')
         .select(`
-          id,
-          topic_id,
-          title,
-          content,
-          topics!inner(title, category_id, categories(name))
+          notes(
+            id,
+            topic_id,
+            title,
+            content,
+            topics(title, category_id, categories(name))
+          )
         `)
-        .eq('note_tags.tag_id', tagId)
+        .eq('tag_id', tagId)
 
       if (error) throw error
       
-      const formattedResults: SearchResult[] = (data || []).map((note: any) => ({
-        note_id: note.id,
-        topic_id: note.topic_id,
-        title: note.title,
-        content_preview: note.content?.substring(0, 200) || '',
-        rank: 1,
-        category_name: note.topics?.categories?.name || null,
-        topic_title: note.topics?.title || ''
-      }))
+      const formattedResults: SearchResult[] = (data || [])
+        .filter((item: any) => item.notes)
+        .map((item: any) => ({
+          note_id: item.notes.id,
+          topic_id: item.notes.topic_id,
+          title: item.notes.title,
+          content_preview: item.notes.content?.substring(0, 200) || '',
+          rank: 1,
+          category_name: item.notes.topics?.categories?.name || null,
+          topic_title: item.notes.topics?.title || ''
+        }))
 
       setResults(formattedResults)
     } catch (e) {
@@ -489,7 +490,10 @@ export function useFavorites() {
 
   const fetchFavorites = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setLoading(false)
+      return
+    }
 
     const { data } = await supabase
       .from('favorites')
@@ -508,9 +512,9 @@ export function useFavorites() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const isFavorite = favorites.includes(topicId)
+    const isFav = favorites.includes(topicId)
 
-    if (isFavorite) {
+    if (isFav) {
       await supabase
         .from('favorites')
         .delete()
