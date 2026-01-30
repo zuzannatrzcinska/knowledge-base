@@ -1,8 +1,6 @@
 // src/pages/NotFound.tsx
-// Strona 404
-
 import { Link } from 'react-router-dom'
-import { Home, Search, ArrowLeft } from 'lucide-react'
+import { Home, Search } from 'lucide-react'
 
 export default function NotFound() {
   return (
