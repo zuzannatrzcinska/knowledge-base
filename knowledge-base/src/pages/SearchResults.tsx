@@ -1,9 +1,7 @@
 // src/pages/SearchResults.tsx
-// Strona wyników wyszukiwania
-
 import { useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Search, FileText, Tag, FolderOpen } from 'lucide-react'
+import { Search, FileText, FolderOpen } from 'lucide-react'
 import { useSearch, useTags } from '../hooks/useKnowledgeBase'
 import { highlightSearchTerm } from '../utils/helpers'
 
@@ -27,7 +25,6 @@ export default function SearchResults() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <header>
         <div className="flex items-center gap-3 mb-2">
           <Search className="w-6 h-6 text-cyan-400" />
@@ -57,7 +54,6 @@ export default function SearchResults() {
         </p>
       </header>
 
-      {/* Results */}
       {loading ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
@@ -76,7 +72,7 @@ export default function SearchResults() {
         </div>
       ) : (
         <div className="space-y-4">
-          {results.map((result) => (
+          {results.map((result: any) => (
             <Link
               key={result.note_id}
               to={`/topic/${result.topic_id}`}
@@ -88,12 +84,10 @@ export default function SearchResults() {
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  {/* Note title */}
                   <h3 className="font-medium text-slate-200 mb-1">
                     {result.title || 'Bez tytułu'}
                   </h3>
                   
-                  {/* Content preview */}
                   <p 
                     className="text-sm text-slate-400 line-clamp-2 mb-2"
                     dangerouslySetInnerHTML={{ 
@@ -101,7 +95,6 @@ export default function SearchResults() {
                     }}
                   />
                   
-                  {/* Location */}
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     {result.category_name && (
                       <>
@@ -114,7 +107,6 @@ export default function SearchResults() {
                   </div>
                 </div>
 
-                {/* Relevance indicator */}
                 <div className="text-xs text-slate-500 shrink-0">
                   {Math.round(result.rank * 100)}% trafności
                 </div>
@@ -124,7 +116,6 @@ export default function SearchResults() {
         </div>
       )}
 
-      {/* Search tips */}
       <aside className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
         <h3 className="font-medium text-slate-200 mb-2">💡 Wskazówki wyszukiwania</h3>
         <ul className="text-sm text-slate-400 space-y-1">
