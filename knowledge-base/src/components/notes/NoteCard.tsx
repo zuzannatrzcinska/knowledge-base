@@ -1,11 +1,10 @@
 // src/components/notes/NoteCard.tsx
-// Karta pojedynczej notatki
+// Karta pojedynczej notatki z wyświetlaniem HTML
 
 import { useState } from 'react'
 import { 
   Edit, Trash2, MoreVertical, ChevronDown, ChevronUp, Paperclip
 } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
 import NoteEditor from './NoteEditor'
 import { formatDate, formatRelativeDate } from '../../utils/helpers'
 
@@ -132,37 +131,28 @@ export default function NoteCard({
         </div>
       </header>
 
-      {/* Content */}
+      {/* Content - wyświetlanie HTML */}
       {isExpanded && (
         <div className="px-4 py-3">
-          <div className="prose prose-invert prose-sm max-w-none">
-            <ReactMarkdown
-              components={{
-                a: ({ children, href, ...props }) => (
-                  <a 
-                    href={href} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-cyan-400 hover:underline"
-                    {...props}
-                  >
-                    {children}
-                  </a>
-                ),
-                code: ({ children, className, ...props }) => {
-                  const isInline = !className
-                  return isInline 
-                    ? <code className="bg-slate-700 px-1 py-0.5 rounded text-cyan-300" {...props}>{children}</code>
-                    : <code className="block bg-slate-900 p-3 rounded-lg overflow-x-auto" {...props}>{children}</code>
-                },
-                pre: ({ children, ...props }) => (
-                  <pre className="bg-slate-900 rounded-lg overflow-hidden" {...props}>{children}</pre>
-                )
-              }}
-            >
-              {note.content}
-            </ReactMarkdown>
-          </div>
+          <div 
+            className="prose prose-invert prose-sm max-w-none
+                       [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-200 [&_h2]:mt-4 [&_h2]:mb-2
+                       [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-300 [&_h3]:mt-3 [&_h3]:mb-1
+                       [&_ul]:list-disc [&_ul]:ml-6 [&_ol]:list-decimal [&_ol]:ml-6
+                       [&_li]:text-slate-300
+                       [&_a]:text-cyan-400 [&_a]:underline
+                       [&_blockquote]:border-l-4 [&_blockquote]:border-cyan-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-400
+                       [&_table]:w-full [&_table]:border-collapse [&_table]:my-4
+                       [&_th]:border [&_th]:border-slate-600 [&_th]:px-3 [&_th]:py-2 [&_th]:bg-slate-700 [&_th]:text-left [&_th]:text-slate-200
+                       [&_td]:border [&_td]:border-slate-600 [&_td]:px-3 [&_td]:py-2 [&_td]:text-slate-300
+                       [&_pre]:bg-slate-900 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-4
+                       [&_code]:bg-slate-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-cyan-300
+                       [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:my-2
+                       [&_p]:text-slate-300 [&_p]:mb-2
+                       [&_strong]:font-bold [&_strong]:text-slate-100
+                       [&_em]:italic"
+            dangerouslySetInnerHTML={{ __html: note.content }}
+          />
 
           {/* Attachments */}
           {note.attachments && note.attachments.length > 0 && (
