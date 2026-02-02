@@ -1,23 +1,27 @@
 // src/hooks/useKnowledgeBase.ts
+// Hooki do obsługi danych z bazy wiedzy
+
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-// ============================================
-// Hook: Kategorie
-// ============================================
+// Hook do kategorii
 export function useCategories() {
   const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const fetchCategories = useCallback(async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      const { data, error } = await supabase.rpc('get_category_tree')
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+      
       if (error) throw error
       setCategories(data || [])
-    } catch (e: any) {
-      setError(e.message || 'Błąd pobierania kategorii')
+    } catch (err) {
+      console.error('Error fetching categories:', err)
     } finally {
       setLoading(false)
     }
@@ -27,35 +31,56 @@ export function useCategories() {
     fetchCategories()
   }, [fetchCategories])
 
-  const createCategory = async (category: any) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from('categories')
-      .insert({ ...category, created_by: user?.id })
-      .select()
-      .single()
-    if (error) throw error
-    await fetchCategories()
-    return data
-  }
-
-  return { categories, loading, error, fetchCategories, createCategory }
+  return { categories, loading, refetch: fetchCategories }
 }
 
-// ============================================
-// Hook: Tematy
-// ============================================
+// Hook do pojedynczej kategorii
+export function useCategory(categoryId: string) {
+  const [category, setCategory] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchCategory() {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('id', categoryId)
+          .single()
+        
+        if (error) throw error
+        setCategory(data)
+      } catch (err) {
+        console.error('Error fetching category:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (categoryId) {
+      fetchCategory()
+    }
+  }, [categoryId])
+
+  return { category, loading }
+}
+
+// Hook do tematów
 export function useTopics(categoryId?: string) {
   const [topics, setTopics] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const fetchTopics = useCallback(async () => {
+    setLoading(true)
     try {
-      setLoading(true)
       let query = supabase
-        .from('topics_with_stats')
-        .select('*')
+        .from('topics')
+        .select(`
+          *,
+          categories(name, color),
+          notes(count)
+        `)
         .eq('is_archived', false)
         .order('is_pinned', { ascending: false })
         .order('updated_at', { ascending: false })
@@ -65,10 +90,28 @@ export function useTopics(categoryId?: string) {
       }
 
       const { data, error } = await query
+      
       if (error) throw error
-      setTopics(data || [])
-    } catch (e: any) {
-      setError(e.message || 'Błąd pobierania tematów')
+      
+      // Pobierz tagi dla każdego tematu
+      const topicsWithTags = await Promise.all((data || []).map(async (topic: any) => {
+        const { data: tagData } = await supabase
+          .from('topic_tags')
+          .select('tags(*)')
+          .eq('topic_id', topic.id)
+        
+        return {
+          ...topic,
+          category_name: topic.categories?.name,
+          category_color: topic.categories?.color,
+          notes_count: topic.notes?.[0]?.count || 0,
+          tags: tagData?.map((t: any) => t.tags) || []
+        }
+      }))
+      
+      setTopics(topicsWithTags)
+    } catch (err) {
+      console.error('Error fetching topics:', err)
     } finally {
       setLoading(false)
     }
@@ -78,287 +121,390 @@ export function useTopics(categoryId?: string) {
     fetchTopics()
   }, [fetchTopics])
 
-  const createTopic = async (topic: any, tagIds?: string[]) => {
+  const createTopic = async (topicData: any, tagIds?: string[]) => {
     const { data: { user } } = await supabase.auth.getUser()
+    
     const { data, error } = await supabase
       .from('topics')
-      .insert({ ...topic, created_by: user?.id })
+      .insert({
+        ...topicData,
+        created_by: user?.id
+      })
       .select()
       .single()
+    
     if (error) throw error
-
+    
+    // Dodaj tagi
     if (tagIds && tagIds.length > 0 && data) {
       await supabase
         .from('topic_tags')
-        .insert(tagIds.map(tag_id => ({ topic_id: data.id, tag_id })))
+        .insert(tagIds.map(tagId => ({ topic_id: data.id, tag_id: tagId })))
     }
-
-    await fetchTopics()
+    
+    fetchTopics()
     return data
   }
 
-  const updateTopic = async (id: string, updates: any) => {
-    const { error } = await supabase.from('topics').update(updates).eq('id', id)
+  const updateTopic = async (topicId: string, updates: any) => {
+    const { error } = await supabase
+      .from('topics')
+      .update(updates)
+      .eq('id', topicId)
+    
     if (error) throw error
-    await fetchTopics()
+    fetchTopics()
   }
 
-  const deleteTopic = async (id: string) => {
-    const { error } = await supabase.from('topics').delete().eq('id', id)
+  const deleteTopic = async (topicId: string) => {
+    const { error } = await supabase
+      .from('topics')
+      .delete()
+      .eq('id', topicId)
+    
     if (error) throw error
-    await fetchTopics()
+    fetchTopics()
   }
 
-  return { topics, loading, error, fetchTopics, createTopic, updateTopic, deleteTopic }
+  return { topics, loading, createTopic, updateTopic, deleteTopic, refetch: fetchTopics }
 }
 
-// ============================================
-// Hook: Pojedynczy temat z notatkami
-// ============================================
+// Hook do pojedynczego tematu
 export function useTopic(topicId: string) {
-  const [topic, setTopic] = useState<any | null>(null)
+  const [topic, setTopic] = useState<any>(null)
   const [notes, setNotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const fetchTopic = useCallback(async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      
+      // Pobierz temat
       const { data: topicData, error: topicError } = await supabase
-        .from('topics_with_stats')
-        .select('*')
+        .from('topics')
+        .select(`
+          *,
+          categories(name, color)
+        `)
         .eq('id', topicId)
         .single()
-
+      
       if (topicError) throw topicError
-      setTopic(topicData)
-
+      
+      // Pobierz tagi tematu
+      const { data: tagData } = await supabase
+        .from('topic_tags')
+        .select('tags(*)')
+        .eq('topic_id', topicId)
+      
+      // Pobierz notatki
       const { data: notesData, error: notesError } = await supabase
         .from('notes')
-        .select(`*, note_tags(tag_id, tags(*)), attachments(*)`)
+        .select('*')
         .eq('topic_id', topicId)
-        .order('sort_order')
-        .order('created_at')
-
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+      
       if (notesError) throw notesError
-
-      const notesWithRelations = (notesData || []).map((note: any) => ({
-        ...note,
-        tags: note.note_tags?.map((nt: any) => nt.tags).filter(Boolean) || [],
-        attachments: note.attachments || []
+      
+      // Pobierz tagi i załączniki dla każdej notatki
+      const notesWithDetails = await Promise.all((notesData || []).map(async (note: any) => {
+        const { data: noteTagData } = await supabase
+          .from('note_tags')
+          .select('tags(*)')
+          .eq('note_id', note.id)
+        
+        const { data: attachmentData } = await supabase
+          .from('attachments')
+          .select('*')
+          .eq('note_id', note.id)
+        
+        return {
+          ...note,
+          tags: noteTagData?.map((t: any) => t.tags) || [],
+          attachments: attachmentData || []
+        }
       }))
-
-      setNotes(notesWithRelations)
-
+      
+      setTopic({
+        ...topicData,
+        category_name: topicData.categories?.name,
+        category_color: topicData.categories?.color,
+        tags: tagData?.map((t: any) => t.tags) || []
+      })
+      setNotes(notesWithDetails)
+      
+      // Zapisz ostatnie przeglądanie
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         await supabase
           .from('recent_views')
-          .upsert({ user_id: user.id, topic_id: topicId, viewed_at: new Date().toISOString() })
+          .upsert({
+            user_id: user.id,
+            topic_id: topicId,
+            viewed_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,topic_id'
+          })
+        
+        // Zwiększ licznik wyświetleń
+        await supabase
+          .from('topics')
+          .update({ view_count: (topicData.view_count || 0) + 1 })
+          .eq('id', topicId)
       }
-    } catch (e: any) {
-      setError(e.message || 'Błąd pobierania tematu')
+    } catch (err) {
+      console.error('Error fetching topic:', err)
     } finally {
       setLoading(false)
     }
   }, [topicId])
 
   useEffect(() => {
-    if (topicId) fetchTopic()
+    if (topicId) {
+      fetchTopic()
+    }
   }, [topicId, fetchTopic])
 
-  return { topic, notes, loading, error, refetch: fetchTopic }
+  return { topic, notes, loading, refetch: fetchTopic }
 }
 
-// ============================================
-// Hook: Notatki
-// ============================================
+// Hook do notatek
 export function useNotes(topicId: string) {
-  const [notes, setNotes] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const fetchNotes = useCallback(async () => {
-    setLoading(true)
-    const { data } = await supabase
-      .from('notes')
-      .select('*')
-      .eq('topic_id', topicId)
-      .order('sort_order')
-      .order('created_at')
-    setNotes(data || [])
-    setLoading(false)
-  }, [topicId])
-
-  useEffect(() => {
-    if (topicId) fetchNotes()
-  }, [topicId, fetchNotes])
-
-  const createNote = async (note: any, tagIds?: string[]) => {
+  const createNote = async (noteData: any, tagIds?: string[]) => {
     const { data: { user } } = await supabase.auth.getUser()
+    
     const { data, error } = await supabase
       .from('notes')
-      .insert({ ...note, topic_id: topicId, created_by: user?.id })
+      .insert({
+        ...noteData,
+        topic_id: topicId,
+        created_by: user?.id
+      })
       .select()
       .single()
+    
     if (error) throw error
-
+    
+    // Dodaj tagi
     if (tagIds && tagIds.length > 0 && data) {
       await supabase
         .from('note_tags')
-        .insert(tagIds.map(tag_id => ({ note_id: data.id, tag_id })))
+        .insert(tagIds.map(tagId => ({ note_id: data.id, tag_id: tagId })))
     }
-
-    await fetchNotes()
+    
     return data
   }
 
-  const updateNote = async (id: string, updates: any) => {
-    const { error } = await supabase.from('notes').update(updates).eq('id', id)
+  const updateNote = async (noteId: string, updates: any) => {
+    const { error } = await supabase
+      .from('notes')
+      .update(updates)
+      .eq('id', noteId)
+    
     if (error) throw error
-    await fetchNotes()
   }
 
-  const deleteNote = async (id: string) => {
-    const { error } = await supabase.from('notes').delete().eq('id', id)
+  const deleteNote = async (noteId: string) => {
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', noteId)
+    
     if (error) throw error
-    await fetchNotes()
   }
 
-  return { notes, loading, fetchNotes, createNote, updateNote, deleteNote }
+  return { createNote, updateNote, deleteNote }
 }
 
-// ============================================
-// Hook: Tagi
-// ============================================
+// Hook do tagów
 export function useTags() {
   const [tags, setTags] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchTags = useCallback(async () => {
-    const { data } = await supabase.from('tags').select('*').order('name')
-    setTags(data || [])
-    setLoading(false)
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setTags(data || [])
+    } catch (err) {
+      console.error('Error fetching tags:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
     fetchTags()
   }, [fetchTags])
 
-  const createTag = async (tag: any) => {
-    const { data, error } = await supabase.from('tags').insert(tag).select().single()
+  const createTag = async (name: string, color?: string) => {
+    const { data, error } = await supabase
+      .from('tags')
+      .insert({ name, color: color || '#6B7280' })
+      .select()
+      .single()
+    
     if (error) throw error
-    await fetchTags()
+    fetchTags()
     return data
   }
 
-  const getOrCreateTag = async (name: string, color?: string) => {
-    const existing = tags.find(t => t.name.toLowerCase() === name.toLowerCase())
-    if (existing) return existing
-    return createTag({ name, color })
+  return { tags, loading, createTag, refetch: fetchTags }
+}
+
+// Hook do ulubionych
+export function useFavorites() {
+  const [favorites, setFavorites] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchFavorites = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setFavorites([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('favorites')
+        .select(`
+          *,
+          topics(id, title)
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      setFavorites(data || [])
+    } catch (err) {
+      console.error('Error fetching favorites:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchFavorites()
+  }, [fetchFavorites])
+
+  const toggleFavorite = async (topicId: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+
+    const isFav = favorites.some(f => f.topic_id === topicId)
+    
+    if (isFav) {
+      const { error } = await supabase
+        .from('favorites')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('topic_id', topicId)
+      
+      if (error) throw error
+    } else {
+      const { error } = await supabase
+        .from('favorites')
+        .insert({ user_id: user.id, topic_id: topicId })
+      
+      if (error) throw error
+    }
+    
+    fetchFavorites()
   }
 
-  return { tags, loading, fetchTags, createTag, getOrCreateTag }
+  const isFavorite = (topicId: string) => {
+    return favorites.some(f => f.topic_id === topicId)
+  }
+
+  return { favorites, loading, toggleFavorite, isFavorite, refetch: fetchFavorites }
 }
 
-// ============================================
-// Hook: Wyszukiwanie
-// ============================================
-export function useSearch() {
-  const [results, setResults] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [query, setQuery] = useState('')
+// Hook do ostatnio przeglądanych
+export function useRecentViews(limit: number = 10) {
+  const [recentTopics, setRecentTopics] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const search = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      setResults([])
-      return
+  useEffect(() => {
+    async function fetchRecentViews() {
+      setLoading(true)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setRecentTopics([])
+          return
+        }
+
+        const { data, error } = await supabase
+          .from('recent_views')
+          .select(`
+            *,
+            topics(id, title)
+          `)
+          .eq('user_id', user.id)
+          .order('viewed_at', { ascending: false })
+          .limit(limit)
+        
+        if (error) throw error
+        setRecentTopics(data?.map((rv: any) => rv.topics).filter(Boolean) || [])
+      } catch (err) {
+        console.error('Error fetching recent views:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    setLoading(true)
-    setQuery(searchQuery)
+    fetchRecentViews()
+  }, [limit])
 
-    try {
-      const { data, error } = await supabase.rpc('search_notes', { search_query: searchQuery })
-      if (error) throw error
-      setResults(data || [])
-    } catch (e) {
-      console.error('Search error:', e)
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const searchByTag = useCallback(async (tagId: string) => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('note_tags')
-        .select(`notes(id, topic_id, title, content, topics(title, category_id, categories(name)))`)
-        .eq('tag_id', tagId)
-
-      if (error) throw error
-      
-      const formattedResults = (data || [])
-        .filter((item: any) => item.notes)
-        .map((item: any) => ({
-          note_id: item.notes.id,
-          topic_id: item.notes.topic_id,
-          title: item.notes.title,
-          content_preview: item.notes.content?.substring(0, 200) || '',
-          rank: 1,
-          category_name: item.notes.topics?.categories?.name || null,
-          topic_title: item.notes.topics?.title || ''
-        }))
-
-      setResults(formattedResults)
-    } catch (e) {
-      console.error('Tag search error:', e)
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  return { results, loading, query, search, searchByTag }
+  return { recentTopics, loading }
 }
 
-// ============================================
-// Hook: Załączniki
-// ============================================
+// Hook do załączników
 export function useAttachments(noteId: string) {
   const [attachments, setAttachments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
 
-  const fetchAttachments = useCallback(async () => {
-    const { data } = await supabase
-      .from('attachments')
-      .select('*')
-      .eq('note_id', noteId)
-      .order('created_at', { ascending: false })
-    setAttachments(data || [])
-  }, [noteId])
-
   useEffect(() => {
-    if (noteId) fetchAttachments()
-  }, [noteId, fetchAttachments])
+    async function fetchAttachments() {
+      const { data, error } = await supabase
+        .from('attachments')
+        .select('*')
+        .eq('note_id', noteId)
+        .order('created_at', { ascending: true })
+      
+      if (error) {
+        console.error('Error fetching attachments:', error)
+        return
+      }
+      setAttachments(data || [])
+    }
+
+    if (noteId) {
+      fetchAttachments()
+    }
+  }, [noteId])
 
   const uploadFile = async (file: File) => {
     setUploading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-      const filePath = `attachments/${noteId}/${fileName}`
-
+      const { data: { user } } = await supabase.auth.getUser()
+      const fileName = `${Date.now()}-${file.name}`
+      const filePath = `notes/${noteId}/${fileName}`
+      
+      // Upload pliku
       const { error: uploadError } = await supabase.storage
         .from('knowledge-base')
         .upload(filePath, file)
-
+      
       if (uploadError) throw uploadError
-
+      
+      // Zapisz w bazie
       const { data, error } = await supabase
         .from('attachments')
         .insert({
@@ -371,9 +517,9 @@ export function useAttachments(noteId: string) {
         })
         .select()
         .single()
-
+      
       if (error) throw error
-      await fetchAttachments()
+      setAttachments(prev => [...prev, data])
       return data
     } finally {
       setUploading(false)
@@ -381,132 +527,60 @@ export function useAttachments(noteId: string) {
   }
 
   const deleteAttachment = async (attachment: any) => {
-    await supabase.storage.from('knowledge-base').remove([attachment.file_path])
-    await supabase.from('attachments').delete().eq('id', attachment.id)
-    await fetchAttachments()
+    // Usuń plik ze storage
+    await supabase.storage
+      .from('knowledge-base')
+      .remove([attachment.file_path])
+    
+    // Usuń z bazy
+    const { error } = await supabase
+      .from('attachments')
+      .delete()
+      .eq('id', attachment.id)
+    
+    if (error) throw error
+    setAttachments(prev => prev.filter(a => a.id !== attachment.id))
   }
 
   const getFileUrl = (filePath: string) => {
-    const { data } = supabase.storage.from('knowledge-base').getPublicUrl(filePath)
+    const { data } = supabase.storage
+      .from('knowledge-base')
+      .getPublicUrl(filePath)
     return data.publicUrl
   }
 
   return { attachments, uploading, uploadFile, deleteAttachment, getFileUrl }
 }
 
-// ============================================
-// Hook: Ulubione
-// ============================================
-export function useFavorites() {
-  const [favorites, setFavorites] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchFavorites = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
-      return
-    }
-
-    const { data } = await supabase.from('favorites').select('topic_id').eq('user_id', user.id)
-    setFavorites(data?.map((f: any) => f.topic_id) || [])
-    setLoading(false)
-  }, [])
+// Hook do wyszukiwania
+export function useSearch(query: string) {
+  const [results, setResults] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetchFavorites()
-  }, [fetchFavorites])
-
-  const toggleFavorite = async (topicId: string) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const isFav = favorites.includes(topicId)
-
-    if (isFav) {
-      await supabase.from('favorites').delete().eq('user_id', user.id).eq('topic_id', topicId)
-      setFavorites(prev => prev.filter(id => id !== topicId))
-    } else {
-      await supabase.from('favorites').insert({ user_id: user.id, topic_id: topicId })
-      setFavorites(prev => [...prev, topicId])
-    }
-  }
-
-  const isFavorite = (topicId: string) => favorites.includes(topicId)
-
-  return { favorites, loading, toggleFavorite, isFavorite }
-}
-
-// ============================================
-// Hook: Historia notatki
-// ============================================
-export function useNoteHistory(noteId: string) {
-  const [history, setHistory] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchHistory = async () => {
-      const { data } = await supabase
-        .from('note_history')
-        .select(`*, users(full_name, avatar_url)`)
-        .eq('note_id', noteId)
-        .order('created_at', { ascending: false })
-      setHistory(data || [])
-      setLoading(false)
-    }
-    if (noteId) fetchHistory()
-  }, [noteId])
-
-  const restoreVersion = async (historyId: string) => {
-    const version = history.find((h: any) => h.id === historyId)
-    if (!version) return
-    await supabase.from('notes').update({ title: version.title, content: version.content }).eq('id', noteId)
-  }
-
-  return { history, loading, restoreVersion }
-}
-
-// ============================================
-// Hook: Ostatnio przeglądane
-// ============================================
-export function useRecentViews(limit = 10) {
-  const [recentTopics, setRecentTopics] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchRecent = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
+    async function search() {
+      if (!query.trim()) {
+        setResults([])
         return
       }
 
-      const { data: recentData } = await supabase
-        .from('recent_views')
-        .select('topic_id')
-        .eq('user_id', user.id)
-        .order('viewed_at', { ascending: false })
-        .limit(limit)
-
-      if (recentData && recentData.length > 0) {
-        const topicIds = recentData.map((r: any) => r.topic_id)
-        const { data: topics } = await supabase
-          .from('topics_with_stats')
-          .select('*')
-          .in('id', topicIds)
-
-        const orderedTopics = topicIds
-          .map((id: string) => topics?.find((t: any) => t.id === id))
-          .filter(Boolean)
-
-        setRecentTopics(orderedTopics)
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .rpc('search_notes', { search_query: query })
+        
+        if (error) throw error
+        setResults(data || [])
+      } catch (err) {
+        console.error('Error searching:', err)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
-    fetchRecent()
-  }, [limit])
+    const timer = setTimeout(search, 300)
+    return () => clearTimeout(timer)
+  }, [query])
 
-  return { recentTopics, loading }
+  return { results, loading }
 }
