@@ -3,16 +3,14 @@
 
 import { useState } from 'react'
 import { 
-  Edit, Trash2, History, Link as LinkIcon, 
-  Paperclip, MoreVertical, ChevronDown, ChevronUp
+  Edit, Trash2, MoreVertical, ChevronDown, ChevronUp, Paperclip
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import NoteEditor from './NoteEditor'
 import { formatDate, formatRelativeDate } from '../../utils/helpers'
-import type { Note, Tag, Attachment } from '../../lib/database.types'
 
 interface NoteCardProps {
-  note: Note & { tags: Tag[]; attachments: Attachment[] }
+  note: any
   isEditing: boolean
   onEdit: () => void
   onSave: (data: { title?: string; content: string; tagIds?: string[] }) => Promise<void>
@@ -41,8 +39,6 @@ export default function NoteCard({
     )
   }
 
-  const isLongContent = note.content.length > 500
-
   return (
     <article className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden hover:border-slate-600 transition-colors">
       {/* Header */}
@@ -66,7 +62,7 @@ export default function NoteCard({
           {/* Tags */}
           {note.tags && note.tags.length > 0 && (
             <div className="hidden sm:flex items-center gap-1">
-              {note.tags.slice(0, 2).map(tag => (
+              {note.tags.slice(0, 2).map((tag: any) => (
                 <span
                   key={tag.id}
                   className="px-2 py-0.5 text-xs rounded-full"
@@ -118,18 +114,6 @@ export default function NoteCard({
                     <Edit className="w-4 h-4" />
                     Edytuj
                   </button>
-                  <button
-                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600 flex items-center gap-2"
-                  >
-                    <History className="w-4 h-4" />
-                    Historia
-                  </button>
-                  <button
-                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600 flex items-center gap-2"
-                  >
-                    <LinkIcon className="w-4 h-4" />
-                    Powiąż
-                  </button>
                   <hr className="my-1 border-slate-600" />
                   <button
                     onClick={() => {
@@ -151,22 +135,28 @@ export default function NoteCard({
       {/* Content */}
       {isExpanded && (
         <div className="px-4 py-3">
-          <div 
-            className={`prose prose-invert prose-sm max-w-none ${
-              !isExpanded && isLongContent ? 'line-clamp-6' : ''
-            }`}
-          >
+          <div className="prose prose-invert prose-sm max-w-none">
             <ReactMarkdown
               components={{
-                a: ({ node, ...props }) => (
-                  <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline" />
+                a: ({ children, href, ...props }) => (
+                  <a 
+                    href={href} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-cyan-400 hover:underline"
+                    {...props}
+                  >
+                    {children}
+                  </a>
                 ),
-                code: ({ node, inline, ...props }) => 
-                  inline 
-                    ? <code {...props} className="bg-slate-700 px-1 py-0.5 rounded text-cyan-300" />
-                    : <code {...props} className="block bg-slate-900 p-3 rounded-lg overflow-x-auto" />,
-                pre: ({ node, ...props }) => (
-                  <pre {...props} className="bg-slate-900 rounded-lg overflow-hidden" />
+                code: ({ children, className, ...props }) => {
+                  const isInline = !className
+                  return isInline 
+                    ? <code className="bg-slate-700 px-1 py-0.5 rounded text-cyan-300" {...props}>{children}</code>
+                    : <code className="block bg-slate-900 p-3 rounded-lg overflow-x-auto" {...props}>{children}</code>
+                },
+                pre: ({ children, ...props }) => (
+                  <pre className="bg-slate-900 rounded-lg overflow-hidden" {...props}>{children}</pre>
                 )
               }}
             >
@@ -181,7 +171,7 @@ export default function NoteCard({
                 Załączniki ({note.attachments.length})
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {note.attachments.map(attachment => (
+                {note.attachments.map((attachment: any) => (
                   <a
                     key={attachment.id}
                     href={attachment.file_path}
