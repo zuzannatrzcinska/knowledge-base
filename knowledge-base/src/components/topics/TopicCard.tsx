@@ -1,23 +1,81 @@
 // src/components/topics/TopicCard.tsx
 // Karta tematu do wyświetlania na listach
 
-import { Link } from 'react-router-dom'
-import { Star, Pin, MoreVertical } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Star, Pin, MoreVertical, Archive, Trash2, Edit } from 'lucide-react'
 import { useState } from 'react'
-import { useFavorites } from '../../hooks/useKnowledgeBase'
-import type { TopicWithStats } from '../../lib/database.types'
+import { useFavorites, useTopics } from '../../hooks/useKnowledgeBase'
 import { formatRelativeDate } from '../../utils/helpers'
 
 interface TopicCardProps {
-  topic: TopicWithStats
+  topic: any
   showCategory?: boolean
 }
 
 export default function TopicCard({ topic, showCategory = true }: TopicCardProps) {
+  const navigate = useNavigate()
   const { toggleFavorite, isFavorite } = useFavorites()
+  const { deleteTopic, updateTopic } = useTopics()
   const [showMenu, setShowMenu] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   
   const favorite = isFavorite(topic.id)
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      await toggleFavorite(topic.id)
+    } catch (err) {
+      console.error('Error toggling favorite:', err)
+    }
+  }
+
+  const handleArchive = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setShowMenu(false)
+    try {
+      await updateTopic(topic.id, { is_archived: !topic.is_archived })
+    } catch (err) {
+      console.error('Error archiving topic:', err)
+    }
+  }
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setShowMenu(false)
+    
+    if (!confirm('Czy na pewno chcesz usunąć ten temat? Ta operacja jest nieodwracalna.')) {
+      return
+    }
+    
+    setIsDeleting(true)
+    try {
+      await deleteTopic(topic.id)
+    } catch (err) {
+      console.error('Error deleting topic:', err)
+      alert('Nie udało się usunąć tematu')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setShowMenu(false)
+    navigate(`/topic/${topic.id}?edit=true`)
+  }
+
+  if (isDeleting) {
+    return (
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 opacity-50">
+        <div className="text-center text-slate-400">Usuwanie...</div>
+      </div>
+    )
+  }
 
   return (
     <Link
@@ -36,16 +94,13 @@ export default function TopicCard({ topic, showCategory = true }: TopicCardProps
         
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              toggleFavorite(topic.id)
-            }}
+            onClick={handleToggleFavorite}
             className={`p-1.5 rounded-lg transition-colors ${
               favorite 
                 ? 'text-amber-400 bg-amber-400/10' 
                 : 'text-slate-400 hover:text-amber-400 hover:bg-slate-700'
             }`}
+            title={favorite ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}
           >
             <Star className="w-4 h-4" fill={favorite ? 'currentColor' : 'none'} />
           </button>
@@ -61,6 +116,43 @@ export default function TopicCard({ topic, showCategory = true }: TopicCardProps
             >
               <MoreVertical className="w-4 h-4" />
             </button>
+            
+            {showMenu && (
+              <>
+                <div 
+                  className="fixed inset-0 z-10" 
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowMenu(false)
+                  }}
+                />
+                <div className="absolute right-0 top-full mt-1 w-40 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-20 py-1">
+                  <button 
+                    onClick={handleEdit}
+                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edytuj
+                  </button>
+                  <button 
+                    onClick={handleArchive}
+                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    <Archive className="w-4 h-4" />
+                    {topic.is_archived ? 'Przywróć' : 'Archiwizuj'}
+                  </button>
+                  <hr className="my-1 border-slate-600" />
+                  <button 
+                    onClick={handleDelete}
+                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Usuń
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -107,7 +199,7 @@ export default function TopicCard({ topic, showCategory = true }: TopicCardProps
               {topic.category_name}
             </span>
           )}
-          <span>{topic.notes_count} notatek</span>
+          <span>{topic.notes_count || 0} notatek</span>
         </div>
         <span>{formatRelativeDate(topic.updated_at)}</span>
       </div>
