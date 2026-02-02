@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { 
   Home, Star, Clock, Tag, 
-  ChevronRight, ChevronDown, Plus, Settings, X, Edit, Trash2
+  ChevronRight, ChevronDown, Plus, Settings, X, Edit, Trash2, MoreVertical
 } from 'lucide-react'
 import { useCategories, useFavorites, useRecentViews, useTags } from '../../hooks/useKnowledgeBase'
 import { supabase } from '../../lib/supabase'
@@ -30,7 +30,12 @@ export default function Sidebar({ open }: SidebarProps) {
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
+  const [newCategoryDescription, setNewCategoryDescription] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
+  
+  // Edycja kategorii
+  const [editingCategory, setEditingCategory] = useState<any>(null)
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState<string | null>(null)
   
   // Modal zarządzania tagami
   const [showTagsModal, setShowTagsModal] = useState(false)
@@ -63,12 +68,14 @@ export default function Sidebar({ open }: SidebarProps) {
         .insert({
           name: newCategoryName.trim(),
           color: newCategoryColor,
+          description: newCategoryDescription.trim() || null,
           created_by: user?.id
         })
       
       if (error) throw error
       
       setNewCategoryName('')
+      setNewCategoryDescription('')
       setShowNewCategoryModal(false)
       refetchCategories()
     } catch (err: any) {
@@ -76,6 +83,65 @@ export default function Sidebar({ open }: SidebarProps) {
       alert('Nie udało się utworzyć kategorii: ' + err.message)
     } finally {
       setSavingCategory(false)
+    }
+  }
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCategory.name.trim()) return
+    
+    setSavingCategory(true)
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({
+          name: editingCategory.name.trim(),
+          color: editingCategory.color,
+          description: editingCategory.description?.trim() || null
+        })
+        .eq('id', editingCategory.id)
+      
+      if (error) throw error
+      
+      setEditingCategory(null)
+      refetchCategories()
+    } catch (err: any) {
+      console.error('Error updating category:', err)
+      alert('Nie udało się zaktualizować kategorii: ' + err.message)
+    } finally {
+      setSavingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    if (!confirm(`Czy na pewno chcesz usunąć kategorię "${categoryName}"?\n\nUWAGA: Wszystkie tematy w tej kategorii zostaną bez kategorii.`)) {
+      return
+    }
+    
+    try {
+      // Najpierw usuń powiązanie tematów z kategorią (ustaw null)
+      await supabase
+        .from('topics')
+        .update({ category_id: null })
+        .eq('category_id', categoryId)
+      
+      // Usuń kategorię
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', categoryId)
+      
+      if (error) throw error
+      
+      setCategoryMenuOpen(null)
+      refetchCategories()
+      
+      // Jeśli użytkownik był na stronie tej kategorii, przekieruj na główną
+      if (location.pathname === `/category/${categoryId}`) {
+        navigate('/')
+      }
+    } catch (err: any) {
+      console.error('Error deleting category:', err)
+      alert('Nie udało się usunąć kategorii: ' + err.message)
     }
   }
 
@@ -168,24 +234,19 @@ export default function Sidebar({ open }: SidebarProps) {
     const hasChildren = children.length > 0
     const isExpanded = expandedCategories.has(category.id)
     const isActiveCategory = location.pathname === `/category/${category.id}`
+    const isMenuOpen = categoryMenuOpen === category.id
 
     return (
       <div>
         <div 
           className={`
-            flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors
+            flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors group
             ${isActiveCategory 
               ? 'bg-cyan-600/20 text-cyan-400' 
               : 'text-slate-300 hover:bg-slate-700/50'
             }
           `}
           style={{ paddingLeft: `${12 + level * 16}px` }}
-          onClick={() => {
-            if (hasChildren) {
-              toggleCategory(category.id)
-            }
-            navigate(`/category/${category.id}`)
-          }}
         >
           {hasChildren ? (
             <button 
@@ -205,11 +266,61 @@ export default function Sidebar({ open }: SidebarProps) {
           )}
           
           <div 
-            className="w-3 h-3 rounded-sm" 
+            className="w-3 h-3 rounded-sm flex-shrink-0" 
             style={{ backgroundColor: category.color || '#6B7280' }}
           />
           
-          <span className="flex-1 truncate text-sm">{category.name}</span>
+          <span 
+            className="flex-1 truncate text-sm"
+            onClick={() => navigate(`/category/${category.id}`)}
+          >
+            {category.name}
+          </span>
+
+          {/* Menu kategorii */}
+          <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setCategoryMenuOpen(isMenuOpen ? null : category.id)
+              }}
+              className="p-1 hover:bg-slate-600 rounded"
+            >
+              <MoreVertical className="w-3 h-3" />
+            </button>
+            
+            {isMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-10" 
+                  onClick={() => setCategoryMenuOpen(null)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-36 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-20 py-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditingCategory({ ...category })
+                      setCategoryMenuOpen(null)
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    <Edit className="w-3 h-3" />
+                    Edytuj
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteCategory(category.id, category.name)
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-slate-600 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Usuń
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {hasChildren && isExpanded && (
@@ -264,6 +375,10 @@ export default function Sidebar({ open }: SidebarProps) {
             
             {categoriesLoading ? (
               <div className="px-3 py-2 text-slate-500 text-sm">Ładowanie...</div>
+            ) : categories.length === 0 ? (
+              <div className="px-3 py-2 text-slate-500 text-sm">
+                Brak kategorii. Kliknij + aby dodać.
+              </div>
             ) : (
               <div className="space-y-0.5">
                 {rootCategories.map((category: any) => (
@@ -310,27 +425,33 @@ export default function Sidebar({ open }: SidebarProps) {
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5 px-3">
-              {(showAllTags ? tags : tags.slice(0, 8)).map((tag: any) => (
-                <Link
-                  key={tag.id}
-                  to={`/search?tag=${tag.id}`}
-                  className="px-2 py-0.5 text-xs rounded-full transition-colors hover:opacity-80"
-                  style={{ 
-                    backgroundColor: `${tag.color}20`,
-                    color: tag.color,
-                    border: `1px solid ${tag.color}40`
-                  }}
-                >
-                  {tag.name}
-                </Link>
-              ))}
-              {tags.length > 8 && (
-                <button
-                  onClick={() => setShowAllTags(!showAllTags)}
-                  className="px-2 py-0.5 text-xs text-slate-400 hover:text-slate-200"
-                >
-                  {showAllTags ? 'Mniej' : `+${tags.length - 8}`}
-                </button>
+              {tags.length === 0 ? (
+                <span className="text-slate-500 text-xs">Kliknij ⚙️ aby dodać tagi</span>
+              ) : (
+                <>
+                  {(showAllTags ? tags : tags.slice(0, 8)).map((tag: any) => (
+                    <Link
+                      key={tag.id}
+                      to={`/search?tag=${tag.id}`}
+                      className="px-2 py-0.5 text-xs rounded-full transition-colors hover:opacity-80"
+                      style={{ 
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color,
+                        border: `1px solid ${tag.color}40`
+                      }}
+                    >
+                      {tag.name}
+                    </Link>
+                  ))}
+                  {tags.length > 8 && (
+                    <button
+                      onClick={() => setShowAllTags(!showAllTags)}
+                      className="px-2 py-0.5 text-xs text-slate-400 hover:text-slate-200"
+                    >
+                      {showAllTags ? 'Mniej' : `+${tags.length - 8}`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -345,14 +466,19 @@ export default function Sidebar({ open }: SidebarProps) {
         </div>
       </aside>
 
-      {/* Modal dodawania kategorii */}
-      {showNewCategoryModal && (
+      {/* Modal dodawania/edycji kategorii */}
+      {(showNewCategoryModal || editingCategory) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-              <h2 className="text-xl font-semibold text-slate-100">Nowa kategoria</h2>
+              <h2 className="text-xl font-semibold text-slate-100">
+                {editingCategory ? 'Edytuj kategorię' : 'Nowa kategoria'}
+              </h2>
               <button
-                onClick={() => setShowNewCategoryModal(false)}
+                onClick={() => {
+                  setShowNewCategoryModal(false)
+                  setEditingCategory(null)
+                }}
                 className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700"
               >
                 <X className="w-5 h-5" />
@@ -365,10 +491,31 @@ export default function Sidebar({ open }: SidebarProps) {
                 </label>
                 <input
                   type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  value={editingCategory ? editingCategory.name : newCategoryName}
+                  onChange={(e) => editingCategory 
+                    ? setEditingCategory({ ...editingCategory, name: e.target.value })
+                    : setNewCategoryName(e.target.value)
+                  }
                   placeholder="np. Nowe urządzenia"
                   autoFocus
+                  className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg
+                           text-slate-100 placeholder-slate-400
+                           focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Opis (opcjonalnie)
+                </label>
+                <input
+                  type="text"
+                  value={editingCategory ? (editingCategory.description || '') : newCategoryDescription}
+                  onChange={(e) => editingCategory 
+                    ? setEditingCategory({ ...editingCategory, description: e.target.value })
+                    : setNewCategoryDescription(e.target.value)
+                  }
+                  placeholder="Krótki opis kategorii"
                   className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg
                            text-slate-100 placeholder-slate-400
                            focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500"
@@ -383,9 +530,12 @@ export default function Sidebar({ open }: SidebarProps) {
                   {colorOptions.map(color => (
                     <button
                       key={color}
-                      onClick={() => setNewCategoryColor(color)}
+                      onClick={() => editingCategory
+                        ? setEditingCategory({ ...editingCategory, color })
+                        : setNewCategoryColor(color)
+                      }
                       className={`w-8 h-8 rounded-lg transition-all ${
-                        newCategoryColor === color 
+                        (editingCategory ? editingCategory.color : newCategoryColor) === color 
                           ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800' 
                           : ''
                       }`}
@@ -397,17 +547,20 @@ export default function Sidebar({ open }: SidebarProps) {
 
               <div className="flex items-center justify-end gap-3 pt-4">
                 <button
-                  onClick={() => setShowNewCategoryModal(false)}
+                  onClick={() => {
+                    setShowNewCategoryModal(false)
+                    setEditingCategory(null)
+                  }}
                   className="px-4 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg"
                 >
                   Anuluj
                 </button>
                 <button
-                  onClick={handleAddCategory}
-                  disabled={!newCategoryName.trim() || savingCategory}
+                  onClick={editingCategory ? handleUpdateCategory : handleAddCategory}
+                  disabled={!(editingCategory ? editingCategory.name.trim() : newCategoryName.trim()) || savingCategory}
                   className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium"
                 >
-                  {savingCategory ? 'Tworzenie...' : 'Utwórz'}
+                  {savingCategory ? 'Zapisywanie...' : (editingCategory ? 'Zapisz' : 'Utwórz')}
                 </button>
               </div>
             </div>
@@ -446,14 +599,13 @@ export default function Sidebar({ open }: SidebarProps) {
                              text-slate-100 placeholder-slate-400 text-sm
                              focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                   />
-                  <div className="relative">
-                    <input
-                      type="color"
-                      value={newTagColor}
-                      onChange={(e) => setNewTagColor(e.target.value)}
-                      className="w-10 h-10 rounded-lg cursor-pointer border-0"
-                    />
-                  </div>
+                  <input
+                    type="color"
+                    value={newTagColor}
+                    onChange={(e) => setNewTagColor(e.target.value)}
+                    className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                    title="Wybierz kolor"
+                  />
                   <button
                     onClick={handleAddTag}
                     disabled={!newTagName.trim() || savingTag}
@@ -466,7 +618,7 @@ export default function Sidebar({ open }: SidebarProps) {
 
               {/* Lista tagów */}
               <div>
-                <h3 className="text-sm font-medium text-slate-300 mb-3">Istniejące tagi</h3>
+                <h3 className="text-sm font-medium text-slate-300 mb-3">Istniejące tagi ({tags.length})</h3>
                 <div className="space-y-2">
                   {tags.map((tag: any) => (
                     <div 
@@ -492,12 +644,14 @@ export default function Sidebar({ open }: SidebarProps) {
                             onClick={handleUpdateTag}
                             disabled={savingTag}
                             className="p-1.5 text-green-400 hover:bg-slate-600 rounded"
+                            title="Zapisz"
                           >
-                            <Check className="w-4 h-4" />
+                            ✓
                           </button>
                           <button
                             onClick={() => setEditingTag(null)}
                             className="p-1.5 text-slate-400 hover:bg-slate-600 rounded"
+                            title="Anuluj"
                           >
                             <X className="w-4 h-4" />
                           </button>
