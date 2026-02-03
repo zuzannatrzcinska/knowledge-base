@@ -1,9 +1,10 @@
 // src/pages/DeviceComparator.tsx
 import { useState, useMemo } from 'react'
-import { Search, Plus, Filter, X, Check, Watch, ChevronDown, ChevronUp, Edit, Trash2, Eye, BarChart3 } from 'lucide-react'
-import { useDevices, DeviceFilters, Device, DEVICE_FEATURES, DEVICE_SPECS } from '../hooks/useDevices'
+import { Search, Plus, Filter, X, Check, Watch, ChevronDown, ChevronUp, Edit, Trash2, Eye, BarChart3, Settings } from 'lucide-react'
+import { useDevices, useDeviceFeatures, DeviceFilters, Device, DEVICE_SPECS } from '../hooks/useDevices'
 import DeviceModal from '../components/devices/DeviceModal'
 import DeviceDetailModal from '../components/devices/DeviceDetailModal'
+import ManageFeaturesModal from '../components/devices/ManageFeaturesModal'
 
 export default function DeviceComparator() {
   const [filters, setFilters] = useState<DeviceFilters>({})
@@ -16,15 +17,21 @@ export default function DeviceComparator() {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([])
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set())
   const [compareMode, setCompareMode] = useState(false)
-  const [viewMode, setViewMode] = useState<'table' | 'spec'>('table')
+  const [showManageFeatures, setShowManageFeatures] = useState(false)
+  const [specFilters, setSpecFilters] = useState<Record<string, { min?: number; max?: number }>>({})
+
+  const { features, featuresByCategory, refetch: refetchFeatures } = useDeviceFeatures()
 
   const activeFilters = useMemo(() => ({
     search: searchQuery || undefined,
     searchSpec: specSearch || undefined,
-    features: selectedFeatures.length > 0 ? selectedFeatures : undefined
-  }), [searchQuery, specSearch, selectedFeatures])
+    features: selectedFeatures.length > 0 ? selectedFeatures : undefined,
+    specs: Object.entries(specFilters)
+      .filter(([_, v]) => v.min !== undefined || v.max !== undefined)
+      .map(([key, v]) => ({ key, ...v }))
+  }), [searchQuery, specSearch, selectedFeatures, specFilters])
 
-  const { devices, loading, error, createDevice, updateDevice, deleteDevice } = useDevices(activeFilters)
+  const { devices, loading, error, createDevice, updateDevice, deleteDevice, refetch } = useDevices(activeFilters)
 
   const displayDevices = useMemo(() => {
     if (compareMode && selectedDevices.size > 0) return devices.filter(d => selectedDevices.has(d.id))
@@ -42,11 +49,11 @@ export default function DeviceComparator() {
 
   // Sortowanie urządzeń po parametrze
   const sortedBySpec = useMemo(() => {
-    if (!activeSpec) return displayDevices
+    if (!activeSpec || activeSpec.type !== 'number') return displayDevices
     return [...displayDevices].sort((a, b) => {
       const aVal = a[activeSpec.key] ?? -Infinity
       const bVal = b[activeSpec.key] ?? -Infinity
-      return bVal - aVal // od największego
+      return bVal - aVal
     })
   }, [displayDevices, activeSpec])
 
@@ -60,6 +67,7 @@ export default function DeviceComparator() {
     setSelectedFeatures([])
     setSearchQuery('')
     setSpecSearch('')
+    setSpecFilters({})
   }
 
   const toggleDeviceSelection = (id: string) => {
@@ -85,27 +93,25 @@ export default function DeviceComparator() {
     } catch (err: any) { alert('Błąd: ' + err.message) }
   }
 
-  // Grupowanie funkcji po kategoriach
-  const featuresByCategory = useMemo(() => {
-    const grouped: Record<string, { key: string; label: string }[]> = {}
-    Object.entries(DEVICE_FEATURES).forEach(([key, { label, category }]) => {
-      if (!grouped[category]) grouped[category] = []
-      grouped[category].push({ key, label })
-    })
-    return grouped
-  }, [])
-
-  const activeFilterCount = selectedFeatures.length + (specSearch ? 1 : 0)
+  const activeFilterCount = selectedFeatures.length + 
+    Object.values(specFilters).filter(v => v.min !== undefined || v.max !== undefined).length +
+    (specSearch ? 1 : 0)
 
   // Kolumny dla tabeli głównej
   const mainColumns = [
     { key: 'name', label: 'Nazwa' },
     { key: 'battery_mah', label: 'Bateria', unit: 'mAh' },
     { key: 'weight_grams', label: 'Waga', unit: 'g' },
-    { key: 'memory_mb', label: 'Pamięć', unit: 'MB' },
+    { key: 'ram_mb', label: 'RAM', unit: 'MB' },
+    { key: 'rom_mb', label: 'ROM', unit: 'MB' },
     { key: 'network', label: 'Sieć' },
     { key: 'ip_rating', label: 'IP' },
   ]
+
+  // Liczenie funkcji dla urządzenia
+  const countFeatures = (device: Device) => {
+    return features.filter(f => device[f.key]).length
+  }
 
   return (
     <div className="space-y-6">
@@ -118,9 +124,14 @@ export default function DeviceComparator() {
           </h1>
           <p className="text-slate-400 mt-1">Porównaj parametry zegarków i lokalizatorów</p>
         </div>
-        <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-medium">
-          <Plus className="w-4 h-4" /> Dodaj urządzenie
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowManageFeatures(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">
+            <Settings className="w-4 h-4" /> Zarządzaj funkcjami
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-medium">
+            <Plus className="w-4 h-4" /> Dodaj urządzenie
+          </button>
+        </div>
       </header>
 
       {/* Search bars */}
@@ -141,7 +152,7 @@ export default function DeviceComparator() {
             type="text" 
             value={specSearch} 
             onChange={(e) => setSpecSearch(e.target.value)} 
-            placeholder="Porównaj parametr (np. bateria, waga, pamięć)..."
+            placeholder="Porównaj parametr (np. bateria, waga, RAM, ROM)..."
             className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50" 
           />
           {activeSpec && (
@@ -156,7 +167,7 @@ export default function DeviceComparator() {
       <div className="flex flex-wrap gap-3">
         <button onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${activeFilterCount > 0 ? 'bg-cyan-600/20 border-cyan-500 text-cyan-400' : 'bg-slate-800/50 border-slate-700 text-slate-300'}`}>
-          <Filter className="w-4 h-4" /> Filtruj po funkcjach
+          <Filter className="w-4 h-4" /> Filtry
           {activeFilterCount > 0 && <span className="px-1.5 py-0.5 text-xs bg-cyan-500 text-white rounded-full">{activeFilterCount}</span>}
           {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
@@ -177,24 +188,65 @@ export default function DeviceComparator() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-4">
-          <h3 className="text-sm font-medium text-slate-300">Filtruj po funkcjach</h3>
-          {Object.entries(featuresByCategory).map(([category, features]) => (
-            <div key={category}>
-              <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">{category}</h4>
-              <div className="flex flex-wrap gap-2">
-                {features.map(({ key, label }) => {
-                  const isActive = selectedFeatures.includes(key)
-                  return (
-                    <button key={key} onClick={() => toggleFeature(key)}
-                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${isActive ? 'bg-cyan-600/20 border border-cyan-500 text-cyan-400' : 'bg-slate-700/50 border border-slate-600 text-slate-300 hover:border-slate-500'}`}>
-                      {label} {isActive && <Check className="w-3 h-3 inline ml-1" />}
-                    </button>
-                  )
-                })}
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-6">
+          {/* Filtry funkcji */}
+          <div>
+            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <Filter className="w-4 h-4" /> Filtruj po funkcjach
+            </h3>
+            {Object.entries(featuresByCategory).map(([category, catFeatures]) => (
+              <div key={category} className="mb-4">
+                <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">{category}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {catFeatures.map((f) => {
+                    const isActive = selectedFeatures.includes(f.key)
+                    return (
+                      <button key={f.key} onClick={() => toggleFeature(f.key)}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-all ${isActive ? 'bg-cyan-600/20 border border-cyan-500 text-cyan-400' : 'bg-slate-700/50 border border-slate-600 text-slate-300 hover:border-slate-500'}`}>
+                        {f.label} {isActive && <Check className="w-3 h-3 inline ml-1" />}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+            ))}
+          </div>
+
+          {/* Filtry parametrów */}
+          <div className="border-t border-slate-700 pt-4">
+            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" /> Filtruj po parametrach
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {Object.entries(DEVICE_SPECS).filter(([_, s]) => s.type === 'number').map(([key, spec]) => (
+                <div key={key} className="space-y-1">
+                  <label className="text-xs text-slate-400">{spec.label} {spec.unit && `(${spec.unit})`}</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      placeholder="min"
+                      value={specFilters[key]?.min ?? ''}
+                      onChange={(e) => setSpecFilters(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], min: e.target.value ? Number(e.target.value) : undefined }
+                      }))}
+                      className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100"
+                    />
+                    <input
+                      type="number"
+                      placeholder="max"
+                      value={specFilters[key]?.max ?? ''}
+                      onChange={(e) => setSpecFilters(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], max: e.target.value ? Number(e.target.value) : undefined }
+                      }))}
+                      className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       )}
 
@@ -207,7 +259,7 @@ export default function DeviceComparator() {
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">{error}</div>}
 
       {/* Spec comparison view */}
-      {activeSpec && sortedBySpec.length > 0 && (
+      {activeSpec && activeSpec.type === 'number' && sortedBySpec.length > 0 && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-purple-500/10 border-b border-slate-700">
             <h3 className="font-medium text-purple-400">Porównanie: {activeSpec.label}</h3>
@@ -266,38 +318,35 @@ export default function DeviceComparator() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {sortedBySpec.map((device) => {
-                  const featureCount = Object.keys(DEVICE_FEATURES).filter(k => device[k]).length
-                  return (
-                    <tr key={device.id} className={`hover:bg-slate-700/30 ${selectedDevices.has(device.id) ? 'bg-purple-500/10' : ''}`}>
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selectedDevices.has(device.id)} onChange={() => toggleDeviceSelection(device.id)} className="rounded border-slate-600" />
+                {sortedBySpec.map((device) => (
+                  <tr key={device.id} className={`hover:bg-slate-700/30 ${selectedDevices.has(device.id) ? 'bg-purple-500/10' : ''}`}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedDevices.has(device.id)} onChange={() => toggleDeviceSelection(device.id)} className="rounded border-slate-600" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => setViewingDevice(device)} className="font-medium text-slate-200 hover:text-cyan-400">
+                        {device.name}
+                      </button>
+                    </td>
+                    {mainColumns.slice(1).map(col => (
+                      <td key={col.key} className="px-4 py-3 whitespace-nowrap text-slate-300">
+                        {device[col.key] != null ? `${device[col.key]}${col.unit ? ` ${col.unit}` : ''}` : <span className="text-slate-500">−</span>}
                       </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => setViewingDevice(device)} className="font-medium text-slate-200 hover:text-cyan-400">
-                          {device.name}
-                        </button>
-                      </td>
-                      {mainColumns.slice(1).map(col => (
-                        <td key={col.key} className="px-4 py-3 whitespace-nowrap text-slate-300">
-                          {device[col.key] != null ? `${device[col.key]}${col.unit ? ` ${col.unit}` : ''}` : <span className="text-slate-500">−</span>}
-                        </td>
-                      ))}
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-sm">
-                          {featureCount} funkcji
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setViewingDevice(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-cyan-400"><Eye className="w-4 h-4" /></button>
-                          <button onClick={() => setEditingDevice(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-cyan-400"><Edit className="w-4 h-4" /></button>
-                          <button onClick={() => handleDelete(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                    ))}
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-sm">
+                        {countFeatures(device)} / {features.length}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setViewingDevice(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-cyan-400"><Eye className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingDevice(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-cyan-400"><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => handleDelete(device)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -316,8 +365,29 @@ export default function DeviceComparator() {
       )}
 
       {/* Modals */}
-      {(showAddModal || editingDevice) && <DeviceModal device={editingDevice} onSave={handleSave} onClose={() => { setShowAddModal(false); setEditingDevice(null) }} />}
-      {viewingDevice && <DeviceDetailModal device={viewingDevice} onClose={() => setViewingDevice(null)} onEdit={() => { setEditingDevice(viewingDevice); setViewingDevice(null) }} />}
+      {(showAddModal || editingDevice) && (
+        <DeviceModal 
+          device={editingDevice} 
+          features={features}
+          featuresByCategory={featuresByCategory}
+          onSave={handleSave} 
+          onClose={() => { setShowAddModal(false); setEditingDevice(null) }} 
+        />
+      )}
+      {viewingDevice && (
+        <DeviceDetailModal 
+          device={viewingDevice} 
+          features={features}
+          featuresByCategory={featuresByCategory}
+          onClose={() => setViewingDevice(null)} 
+          onEdit={() => { setEditingDevice(viewingDevice); setViewingDevice(null) }} 
+        />
+      )}
+      {showManageFeatures && (
+        <ManageFeaturesModal 
+          onClose={() => { setShowManageFeatures(false); refetchFeatures() }} 
+        />
+      )}
     </div>
   )
 }
