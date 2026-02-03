@@ -1,4 +1,6 @@
 // src/pages/NotFound.tsx
+// Strona 404
+
 import { Link } from 'react-router-dom'
 import { Home, Search } from 'lucide-react'
 
@@ -6,12 +8,10 @@ export default function NotFound() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="text-center">
-        <div className="text-8xl font-bold text-slate-700 mb-4">404</div>
-        <h1 className="text-2xl font-bold text-slate-100 mb-2">
-          Strona nie znaleziona
-        </h1>
+        <h1 className="text-6xl font-bold text-slate-600 mb-4">404</h1>
+        <h2 className="text-2xl font-semibold text-slate-300 mb-2">Strona nie znaleziona</h2>
         <p className="text-slate-400 mb-8">
-          Przepraszamy, ale strona której szukasz nie istnieje lub została przeniesiona.
+          Przepraszamy, nie możemy znaleźć strony której szukasz.
         </p>
         
         <div className="flex items-center justify-center gap-4">
