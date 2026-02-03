@@ -1,6 +1,7 @@
 // src/components/devices/DeviceDetailModal.tsx
+import { useMemo } from 'react'
 import { X, Edit, Watch, Check, Minus } from 'lucide-react'
-import { Device } from '../../hooks/useDevices'
+import { Device, DEVICE_FEATURES, DEVICE_SPECS } from '../../hooks/useDevices'
 
 interface Props {
   device: Device
@@ -9,122 +10,157 @@ interface Props {
 }
 
 export default function DeviceDetailModal({ device, onClose, onEdit }: Props) {
-  const Feature = ({ label, value }: { label: string; value: boolean }) => (
-    <div className={`flex items-center gap-3 p-3 rounded-lg ${value ? 'bg-green-500/10' : 'bg-slate-700/30'}`}>
-      <span className={value ? 'text-slate-200' : 'text-slate-500'}>{label}</span>
-      <span className={`ml-auto ${value ? 'text-green-400' : 'text-slate-500'}`}>{value ? <Check className="w-4 h-4" /> : <Minus className="w-4 h-4" />}</span>
-    </div>
-  )
+  // Grupowanie funkcji po kategoriach
+  const featuresByCategory = useMemo(() => {
+    const grouped: Record<string, { key: string; label: string; hasFeature: boolean }[]> = {}
+    Object.entries(DEVICE_FEATURES).forEach(([key, { label, category }]) => {
+      if (!grouped[category]) grouped[category] = []
+      grouped[category].push({ key, label, hasFeature: device[key] || false })
+    })
+    return grouped
+  }, [device])
 
-  const Spec = ({ label, value, suffix }: { label: string; value: any; suffix?: string }) => {
-    if (value == null || value === '') return null
-    return <div className="flex justify-between py-2 border-b border-slate-700/50"><span className="text-slate-400">{label}</span><span className="text-slate-200 font-medium">{value}{suffix}</span></div>
-  }
+  // Liczenie funkcji
+  const totalFeatures = Object.keys(DEVICE_FEATURES).length
+  const activeFeatures = Object.keys(DEVICE_FEATURES).filter(k => device[k]).length
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center">
-              <Watch className="w-6 h-6 text-slate-400" />
+            <div className="w-12 h-12 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <Watch className="w-6 h-6 text-cyan-400" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-slate-100">{device.name}</h2>
-              {device.model && device.model !== device.name && <p className="text-sm text-slate-400">{device.model}</p>}
+              {device.model && device.model !== device.name && (
+                <p className="text-sm text-slate-400">{device.model}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onEdit} className="p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-700"><Edit className="w-5 h-5" /></button>
-            <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700"><X className="w-5 h-5" /></button>
+            <button onClick={onEdit} className="p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-700">
+              <Edit className="w-5 h-5" />
+            </button>
+            <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700">
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
+        {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {device.description && <p className="text-slate-300">{device.description}</p>}
-          <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm capitalize">{device.category}</span>
+          {/* Description */}
+          {device.description && (
+            <p className="text-slate-300">{device.description}</p>
+          )}
 
+          {/* Category & Stats */}
+          <div className="flex flex-wrap gap-3">
+            <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm capitalize">
+              {device.category}
+            </span>
+            <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
+              {activeFeatures}/{totalFeatures} funkcji
+            </span>
+          </div>
+
+          {/* Parametry techniczne */}
           <div>
-            <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Specyfikacja techniczna</h3>
-            <div className="bg-slate-700/20 rounded-lg p-4">
-              <Spec label="Pojemność baterii" value={device.battery_capacity} suffix=" mAh" />
-              <Spec label="Czas pracy" value={device.battery_life_days} suffix=" dni" />
-              <Spec label="Waga" value={device.weight_grams} suffix=" g" />
-              <Spec label="Wymiary" value={device.dimensions} />
-              <Spec label="Wodoodporność" value={device.water_resistance} />
-              <Spec label="Ekran" value={device.screen_size} suffix='"' />
-              <Spec label="Typ ekranu" value={device.screen_type} />
-              <Spec label="Karta SIM" value={device.sim_type} />
+            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+              Parametry techniczne
+            </h3>
+            <div className="bg-slate-700/20 rounded-lg divide-y divide-slate-700/50">
+              {Object.entries(DEVICE_SPECS).map(([key, spec]) => {
+                const value = device[key]
+                if (value == null && value !== 0) return null
+                return (
+                  <div key={key} className="flex justify-between py-3 px-4">
+                    <span className="text-slate-400">{spec.label}</span>
+                    <span className="text-slate-200 font-medium">
+                      {value}{spec.unit ? ` ${spec.unit}` : ''}
+                    </span>
+                  </div>
+                )
+              })}
+              {Object.entries(DEVICE_SPECS).every(([key]) => device[key] == null) && (
+                <div className="py-3 px-4 text-slate-500 text-center">
+                  Brak danych technicznych
+                </div>
+              )}
             </div>
           </div>
 
+          {/* Funkcje */}
           <div>
-            <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Łączność</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <Feature label="GPS" value={device.has_gps} />
-              <Feature label="WiFi" value={device.has_wifi} />
-              <Feature label="Bluetooth" value={device.has_bluetooth} />
-              <Feature label="LTE / 4G" value={device.has_lte} />
-              <Feature label="NFC" value={device.has_nfc} />
-            </div>
+            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+              Funkcje urządzenia
+            </h3>
+            
+            {Object.entries(featuresByCategory).map(([category, features]) => {
+              const activeInCategory = features.filter(f => f.hasFeature).length
+              if (activeInCategory === 0) return null
+              
+              return (
+                <div key={category} className="mb-4">
+                  <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    {category}
+                    <span className="text-cyan-400">({activeInCategory})</span>
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {features.filter(f => f.hasFeature).map(({ key, label }) => (
+                      <div key={key} className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg">
+                        <Check className="w-4 h-4 text-green-400" />
+                        <span className="text-slate-200 text-sm">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Brakujące funkcje */}
+            <details className="mt-4">
+              <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-400">
+                Pokaż brakujące funkcje ({totalFeatures - activeFeatures})
+              </summary>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(DEVICE_FEATURES)
+                  .filter(([key]) => !device[key])
+                  .map(([key, { label }]) => (
+                    <div key={key} className="flex items-center gap-2 p-2 bg-slate-700/30 rounded-lg">
+                      <Minus className="w-4 h-4 text-slate-500" />
+                      <span className="text-slate-500 text-sm">{label}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </details>
           </div>
 
-          <div>
-            <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Zdrowie i fitness</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <Feature label="Pulsometr" value={device.has_heart_rate} />
-              <Feature label="Pomiar SpO2" value={device.has_blood_oxygen} />
-              <Feature label="Monitoring snu" value={device.has_sleep_tracking} />
-              <Feature label="Krokomierz" value={device.has_step_counter} />
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Komunikacja i bezpieczeństwo</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <Feature label="Połączenia głosowe" value={device.has_voice_call} />
-              <Feature label="Wideorozmowy" value={device.has_video_call} />
-              <Feature label="Przycisk SOS" value={device.has_sos_button} />
-              <Feature label="Geofence" value={device.has_geofence} />
-              <Feature label="Zdalne wyłączanie" value={device.has_remote_shutdown} />
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Narzędzia</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <Feature label="Budzik" value={device.has_alarm} />
-              <Feature label="Stoper" value={device.has_stopwatch} />
-              <Feature label="Timer" value={device.has_timer} />
-              <Feature label="Kalkulator" value={device.has_calculator} />
-              <Feature label="Latarka" value={device.has_flashlight} />
-              <Feature label="Aparat" value={device.has_camera} />
-            </div>
-          </div>
-
-          {(device.operating_system || device.compatible_with || device.price || device.release_year) && (
+          {/* Notatki */}
+          {device.notes && (
             <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Dodatkowe informacje</h3>
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+                Notatki
+              </h3>
               <div className="bg-slate-700/20 rounded-lg p-4">
-                <Spec label="System operacyjny" value={device.operating_system} />
-                <Spec label="Kompatybilność" value={device.compatible_with} />
-                <Spec label="Cena" value={device.price} suffix=" PLN" />
-                <Spec label="Rok wydania" value={device.release_year} />
+                <p className="text-slate-300 whitespace-pre-wrap">{device.notes}</p>
               </div>
             </div>
           )}
-
-          {device.notes && (
-            <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase mb-3">Notatki</h3>
-              <div className="bg-slate-700/20 rounded-lg p-4"><p className="text-slate-300 whitespace-pre-wrap">{device.notes}</p></div>
-            </div>
-          )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
-          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 text-cyan-400 hover:bg-cyan-500/10 rounded-lg"><Edit className="w-4 h-4" /> Edytuj</button>
-          <button onClick={onClose} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">Zamknij</button>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3 shrink-0">
+          <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2 text-cyan-400 hover:bg-cyan-500/10 rounded-lg">
+            <Edit className="w-4 h-4" /> Edytuj
+          </button>
+          <button onClick={onClose} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">
+            Zamknij
+          </button>
         </div>
       </div>
     </div>
