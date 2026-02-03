@@ -1,39 +1,33 @@
 // src/App.tsx
-// Główny komponent aplikacji
+// Główny komponent aplikacji z routingiem - ZAKTUALIZOWANY
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
-import { Session } from '@supabase/supabase-js'
-
-// Layouts
-import MainLayout from './components/layouts/MainLayout'
-
-// Pages
-import Dashboard from './pages/Dashboard'
-import TopicView from './pages/TopicView'
+import Header from './components/navigation/Header'
+import Sidebar from './components/navigation/Sidebar'
+import HomePage from './pages/HomePage'
 import CategoryView from './pages/CategoryView'
+import TopicView from './pages/TopicView'
 import SearchResults from './pages/SearchResults'
-import Login from './pages/Login'
+import DeviceComparator from './pages/DeviceComparator'
+import AuthPage from './pages/AuthPage'
 import NotFound from './pages/NotFound'
 
-function App() {
-  const [session, setSession] = useState<Session | null>(null)
+export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Pobierz aktualną sesję
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setLoading(false)
     })
 
-    // Nasłuchuj zmian sesji
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session)
-      }
-    )
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
 
     return () => subscription.unsubscribe()
   }, [])
@@ -47,23 +41,39 @@ function App() {
   }
 
   if (!session) {
-    return <Login />
+    return <AuthPage />
   }
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="category/:categoryId" element={<CategoryView />} />
-          <Route path="topic/:topicId" element={<TopicView />} />
-          <Route path="search" element={<SearchResults />} />
-          <Route path="404" element={<NotFound />} />
-          <Route path="*" element={<Navigate to="/404" replace />} />
-        </Route>
-      </Routes>
+      <div className="min-h-screen bg-slate-900 text-slate-100">
+        <Header 
+          onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
+          sidebarOpen={sidebarOpen}
+        />
+        
+        <Sidebar 
+          open={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)}
+        />
+        
+        <main className={`
+          pt-20 pb-8 px-4 md:px-8 min-h-screen
+          transition-all duration-300
+          ${sidebarOpen ? 'ml-64' : 'ml-0'}
+        `}>
+          <div className="max-w-7xl mx-auto">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/category/:categoryId" element={<CategoryView />} />
+              <Route path="/topic/:topicId" element={<TopicView />} />
+              <Route path="/search" element={<SearchResults />} />
+              <Route path="/devices" element={<DeviceComparator />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
+        </main>
+      </div>
     </BrowserRouter>
   )
 }
-
-export default App
