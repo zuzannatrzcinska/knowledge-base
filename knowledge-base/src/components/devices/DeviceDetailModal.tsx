@@ -1,28 +1,20 @@
 // src/components/devices/DeviceDetailModal.tsx
 import { useMemo } from 'react'
 import { X, Edit, Watch, Check, Minus } from 'lucide-react'
-import { Device, DEVICE_FEATURES, DEVICE_SPECS } from '../../hooks/useDevices'
+import { Device, DeviceFeature, DEVICE_SPECS } from '../../hooks/useDevices'
 
 interface Props {
   device: Device
+  features: DeviceFeature[]
+  featuresByCategory: Record<string, DeviceFeature[]>
   onClose: () => void
   onEdit: () => void
 }
 
-export default function DeviceDetailModal({ device, onClose, onEdit }: Props) {
-  // Grupowanie funkcji po kategoriach
-  const featuresByCategory = useMemo(() => {
-    const grouped: Record<string, { key: string; label: string; hasFeature: boolean }[]> = {}
-    Object.entries(DEVICE_FEATURES).forEach(([key, { label, category }]) => {
-      if (!grouped[category]) grouped[category] = []
-      grouped[category].push({ key, label, hasFeature: device[key] || false })
-    })
-    return grouped
-  }, [device])
-
+export default function DeviceDetailModal({ device, features, featuresByCategory, onClose, onEdit }: Props) {
   // Liczenie funkcji
-  const totalFeatures = Object.keys(DEVICE_FEATURES).length
-  const activeFeatures = Object.keys(DEVICE_FEATURES).filter(k => device[k]).length
+  const totalFeatures = features.length
+  const activeFeatures = features.filter(f => device[f.key]).length
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -99,8 +91,8 @@ export default function DeviceDetailModal({ device, onClose, onEdit }: Props) {
               Funkcje urządzenia
             </h3>
             
-            {Object.entries(featuresByCategory).map(([category, features]) => {
-              const activeInCategory = features.filter(f => f.hasFeature).length
+            {Object.entries(featuresByCategory).map(([category, catFeatures]) => {
+              const activeInCategory = catFeatures.filter(f => device[f.key]).length
               if (activeInCategory === 0) return null
               
               return (
@@ -110,10 +102,10 @@ export default function DeviceDetailModal({ device, onClose, onEdit }: Props) {
                     <span className="text-cyan-400">({activeInCategory})</span>
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {features.filter(f => f.hasFeature).map(({ key, label }) => (
-                      <div key={key} className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg">
+                    {catFeatures.filter(f => device[f.key]).map((feature) => (
+                      <div key={feature.key} className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg">
                         <Check className="w-4 h-4 text-green-400" />
-                        <span className="text-slate-200 text-sm">{label}</span>
+                        <span className="text-slate-200 text-sm">{feature.label}</span>
                       </div>
                     ))}
                   </div>
@@ -122,22 +114,21 @@ export default function DeviceDetailModal({ device, onClose, onEdit }: Props) {
             })}
 
             {/* Brakujące funkcje */}
-            <details className="mt-4">
-              <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-400">
-                Pokaż brakujące funkcje ({totalFeatures - activeFeatures})
-              </summary>
-              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
-                {Object.entries(DEVICE_FEATURES)
-                  .filter(([key]) => !device[key])
-                  .map(([key, { label }]) => (
-                    <div key={key} className="flex items-center gap-2 p-2 bg-slate-700/30 rounded-lg">
+            {activeFeatures < totalFeatures && (
+              <details className="mt-4">
+                <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-400">
+                  Pokaż brakujące funkcje ({totalFeatures - activeFeatures})
+                </summary>
+                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {features.filter(f => !device[f.key]).map((feature) => (
+                    <div key={feature.key} className="flex items-center gap-2 p-2 bg-slate-700/30 rounded-lg">
                       <Minus className="w-4 h-4 text-slate-500" />
-                      <span className="text-slate-500 text-sm">{label}</span>
+                      <span className="text-slate-500 text-sm">{feature.label}</span>
                     </div>
-                  ))
-                }
-              </div>
-            </details>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
 
           {/* Notatki */}
