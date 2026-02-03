@@ -1,20 +1,22 @@
 // src/components/devices/DeviceModal.tsx
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { X, Save, Watch, ChevronDown, ChevronUp, Check } from 'lucide-react'
-import { Device, DEVICE_FEATURES, DEVICE_SPECS } from '../../hooks/useDevices'
+import { Device, DeviceFeature, DEVICE_SPECS } from '../../hooks/useDevices'
 
 interface DeviceModalProps {
   device?: Device | null
+  features: DeviceFeature[]
+  featuresByCategory: Record<string, DeviceFeature[]>
   onSave: (data: Partial<Device>) => Promise<void>
   onClose: () => void
 }
 
-export default function DeviceModal({ device, onSave, onClose }: DeviceModalProps) {
+export default function DeviceModal({ device, features, featuresByCategory, onSave, onClose }: DeviceModalProps) {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'features'>('basic')
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Podstawowe', 'Lokalizacja']))
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(Object.keys(featuresByCategory)))
   
-  // Inicjalizacja formData z wszystkimi polami
+  // Inicjalizacja formData
   const [formData, setFormData] = useState<Partial<Device>>(() => {
     const initial: Partial<Device> = {
       name: device?.name || '',
@@ -30,8 +32,8 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
     })
     
     // Dodaj wszystkie features
-    Object.keys(DEVICE_FEATURES).forEach(key => {
-      initial[key] = device?.[key] ?? false
+    features.forEach(f => {
+      initial[f.key] = device?.[f.key] ?? false
     })
     
     return initial
@@ -64,18 +66,8 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
     })
   }
 
-  // Grupowanie funkcji po kategoriach
-  const featuresByCategory = useMemo(() => {
-    const grouped: Record<string, { key: string; label: string }[]> = {}
-    Object.entries(DEVICE_FEATURES).forEach(([key, { label, category }]) => {
-      if (!grouped[category]) grouped[category] = []
-      grouped[category].push({ key, label })
-    })
-    return grouped
-  }, [])
-
   // Liczenie zaznaczonych funkcji
-  const selectedFeaturesCount = Object.keys(DEVICE_FEATURES).filter(k => formData[k]).length
+  const selectedFeaturesCount = features.filter(f => formData[f.key]).length
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -96,7 +88,7 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
           {[
             { id: 'basic', label: 'Podstawowe' },
             { id: 'specs', label: 'Parametry techniczne' },
-            { id: 'features', label: `Funkcje (${selectedFeaturesCount})` },
+            { id: 'features', label: `Funkcje (${selectedFeaturesCount}/${features.length})` },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
               className={`px-6 py-3 text-sm font-medium transition-colors ${
@@ -180,7 +172,7 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
             {activeTab === 'specs' && (
               <div className="space-y-4">
                 <p className="text-sm text-slate-400 mb-4">
-                  Wprowadź parametry techniczne urządzenia. Możesz później porównywać urządzenia po tych parametrach.
+                  Wprowadź parametry techniczne urządzenia. Możesz później porównywać i filtrować urządzenia po tych parametrach.
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -193,7 +185,6 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                         <input
                           type="text"
                           inputMode="numeric"
-                          pattern="[0-9]*\.?[0-9]*"
                           value={formData[key] ?? ''}
                           onChange={(e) => {
                             const val = e.target.value
@@ -201,7 +192,7 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                               updateField(key, val === '' ? null : parseFloat(val))
                             }
                           }}
-                          placeholder={`np. ${key === 'battery_mah' ? '680' : key === 'weight_grams' ? '45' : key === 'memory_mb' ? '512' : '0'}`}
+                          placeholder={`np. ${key === 'battery_mah' ? '680' : key === 'weight_grams' ? '45' : key === 'ram_mb' ? '128' : key === 'rom_mb' ? '256' : '0'}`}
                           className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                         />
                       ) : (
@@ -209,7 +200,7 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                           type="text"
                           value={formData[key] || ''}
                           onChange={(e) => updateField(key, e.target.value || null)}
-                          placeholder={key === 'network' ? 'np. 2G/3G/4G' : key === 'ip_rating' ? 'np. IP67' : ''}
+                          placeholder={key === 'network' ? 'np. 2G/3G/4G LTE' : key === 'ip_rating' ? 'np. IP67' : key === 'screen_size' ? 'np. 1.4"' : key === 'screen_resolution' ? 'np. 240x240' : ''}
                           className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                         />
                       )}
@@ -226,9 +217,9 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                   Zaznacz funkcje dostępne w tym urządzeniu. Kliknij na kategorię, aby ją rozwinąć/zwinąć.
                 </p>
                 
-                {Object.entries(featuresByCategory).map(([category, features]) => {
+                {Object.entries(featuresByCategory).map(([category, catFeatures]) => {
                   const isExpanded = expandedCategories.has(category)
-                  const selectedInCategory = features.filter(f => formData[f.key]).length
+                  const selectedInCategory = catFeatures.filter(f => formData[f.key]).length
                   
                   return (
                     <div key={category} className="border border-slate-700 rounded-lg overflow-hidden">
@@ -239,8 +230,8 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                       >
                         <span className="font-medium text-slate-200">{category}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-400">
-                            {selectedInCategory}/{features.length}
+                          <span className={`text-sm ${selectedInCategory > 0 ? 'text-cyan-400' : 'text-slate-500'}`}>
+                            {selectedInCategory}/{catFeatures.length}
                           </span>
                           {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                         </div>
@@ -248,23 +239,23 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                       
                       {isExpanded && (
                         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                          {features.map(({ key, label }) => (
+                          {catFeatures.map((feature) => (
                             <label 
-                              key={key}
+                              key={feature.key}
                               className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
-                                formData[key] 
+                                formData[feature.key] 
                                   ? 'bg-cyan-500/20 border border-cyan-500/50' 
                                   : 'bg-slate-700/30 border border-transparent hover:bg-slate-700/50'
                               }`}
                             >
                               <input
                                 type="checkbox"
-                                checked={formData[key] || false}
-                                onChange={(e) => updateField(key, e.target.checked)}
+                                checked={formData[feature.key] || false}
+                                onChange={(e) => updateField(feature.key, e.target.checked)}
                                 className="w-5 h-5 rounded border-slate-600 text-cyan-500 focus:ring-cyan-500/50"
                               />
-                              <span className={formData[key] ? 'text-cyan-400' : 'text-slate-300'}>
-                                {label}
+                              <span className={formData[feature.key] ? 'text-cyan-400' : 'text-slate-300'}>
+                                {feature.label}
                               </span>
                             </label>
                           ))}
@@ -278,18 +269,14 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
                 <div className="flex gap-2 pt-4 border-t border-slate-700">
                   <button
                     type="button"
-                    onClick={() => {
-                      Object.keys(DEVICE_FEATURES).forEach(key => updateField(key, true))
-                    }}
+                    onClick={() => features.forEach(f => updateField(f.key, true))}
                     className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"
                   >
                     Zaznacz wszystkie
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      Object.keys(DEVICE_FEATURES).forEach(key => updateField(key, false))
-                    }}
+                    onClick={() => features.forEach(f => updateField(f.key, false))}
                     className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"
                   >
                     Odznacz wszystkie
@@ -302,7 +289,7 @@ export default function DeviceModal({ device, onSave, onClose }: DeviceModalProp
           {/* Footer */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700 bg-slate-800/50 shrink-0">
             <div className="text-sm text-slate-400">
-              {selectedFeaturesCount} funkcji zaznaczonych
+              {selectedFeaturesCount} / {features.length} funkcji zaznaczonych
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg">
