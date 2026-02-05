@@ -29,7 +29,7 @@ export default function DeviceComparator() {
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set())
   const [compareMode, setCompareMode] = useState(false)
 
-  // ==================== WYSZUKIWANIE PARAMETRU ====================
+  // ==================== WYSZUKIWANIE PARAMETRU/FUNKCJI ====================
   // Znajdź parametr pasujący do wyszukiwania (po label lub key)
   const matchedSpec = useMemo(() => {
     if (!specSearchQuery.trim()) return null
@@ -46,6 +46,18 @@ export default function DeviceComparator() {
       (query === 'memory' && (s.key === 'ram' || s.key === 'rom'))
     )
   }, [specSearchQuery, specs])
+
+  // Znajdź funkcję pasującą do wyszukiwania (po label lub key)
+  const matchedFeature = useMemo(() => {
+    if (!specSearchQuery.trim() || matchedSpec) return null // Priorytet dla parametrów
+    
+    const query = specSearchQuery.toLowerCase().trim()
+    
+    return features.find(f => 
+      f.label.toLowerCase().includes(query) || 
+      f.key.toLowerCase().includes(query)
+    )
+  }, [specSearchQuery, features, matchedSpec])
 
   // ==================== FILTROWANIE URZĄDZEŃ ====================
   const filteredDevices = useMemo(() => {
@@ -85,10 +97,13 @@ export default function DeviceComparator() {
       result = result.filter(d => d.specs[matchedSpec.key] != null)
     }
 
+    // Jeśli wyszukujemy funkcję, nie filtrujemy - pokaż wszystkie urządzenia
+    // (później w tabeli pokażemy które mają a które nie)
+
     return result
   }, [devices, searchQuery, selectedFeatureFilters, specRangeFilters, matchedSpec])
 
-  // ==================== SORTOWANIE PO PARAMETRZE ====================
+  // ==================== SORTOWANIE PO PARAMETRZE/FUNKCJI ====================
   const sortedDevices = useMemo(() => {
     // Jeśli wyszukujemy parametr numeryczny, sortuj po nim
     if (matchedSpec && matchedSpec.data_type === 'number') {
@@ -98,8 +113,18 @@ export default function DeviceComparator() {
         return bVal - aVal // Od największego do najmniejszego
       })
     }
+    
+    // Jeśli wyszukujemy funkcję, sortuj: najpierw które mają, potem które nie mają
+    if (matchedFeature) {
+      return [...filteredDevices].sort((a, b) => {
+        const aHas = a.features[matchedFeature.key] === true ? 1 : 0
+        const bHas = b.features[matchedFeature.key] === true ? 1 : 0
+        return bHas - aHas
+      })
+    }
+    
     return filteredDevices
-  }, [filteredDevices, matchedSpec])
+  }, [filteredDevices, matchedSpec, matchedFeature])
 
   // ==================== WIDOK PORÓWNANIA ====================
   const displayDevices = useMemo(() => {
@@ -336,6 +361,11 @@ export default function DeviceComparator() {
             • Sortowanie po: <strong>{matchedSpec.label}</strong>
           </span>
         )}
+        {matchedFeature && (
+          <span className="text-cyan-400 ml-2">
+            • Porównanie funkcji: <strong>{matchedFeature.label}</strong>
+          </span>
+        )}
       </div>
 
       {error && (
@@ -377,6 +407,60 @@ export default function DeviceComparator() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== TABELA PORÓWNANIA FUNKCJI ==================== */}
+      {matchedFeature && displayDevices.length > 0 && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 bg-cyan-500/10 border-b border-slate-700">
+            <h3 className="font-medium text-cyan-400">
+              Porównanie funkcji: {matchedFeature.label}
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-800">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">#</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Model</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase">{matchedFeature.label}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {displayDevices.map((device, index) => {
+                  const hasFeature = device.features[matchedFeature.key] === true
+                  return (
+                    <tr key={device.id} className="hover:bg-slate-700/30">
+                      <td className="px-4 py-3 text-slate-500 text-sm font-medium">#{index + 1}</td>
+                      <td className="px-4 py-3">
+                        <button 
+                          onClick={() => setViewingDevice(device)} 
+                          className="font-medium text-slate-200 hover:text-cyan-400"
+                        >
+                          {device.name}
+                        </button>
+                        {device.model && device.model !== device.name && (
+                          <span className="text-slate-500 text-sm ml-2">({device.model})</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {hasFeature ? (
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-500/20 text-green-400">
+                            <Check className="w-5 h-5" />
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-500/20 text-red-400">
+                            <X className="w-5 h-5" />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
