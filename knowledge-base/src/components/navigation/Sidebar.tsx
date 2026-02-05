@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { 
   Home, Star, Clock, Tag, Watch,
-  ChevronRight, ChevronDown, Plus, Settings, X, Edit, Trash2, MoreVertical
+  ChevronRight, ChevronDown, Plus, Settings, X, Edit, Trash2, MoreVertical, Check
 } from 'lucide-react'
 import { useCategories, useFavorites, useRecentViews, useTags } from '../../hooks/useKnowledgeBase'
 import { supabase } from '../../lib/supabase'
@@ -31,6 +31,10 @@ export default function Sidebar({ open }: SidebarProps) {
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
   const [savingCategory, setSavingCategory] = useState(false)
+  
+  // Modal zarządzania kategoriami
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<any>(null)
   
   // Modal zarządzania tagami
   const [showTagsModal, setShowTagsModal] = useState(false)
@@ -148,6 +152,57 @@ export default function Sidebar({ open }: SidebarProps) {
     }
   }
 
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCategory.name.trim()) return
+    
+    setSavingCategory(true)
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({
+          name: editingCategory.name.trim(),
+          color: editingCategory.color
+        })
+        .eq('id', editingCategory.id)
+      
+      if (error) throw error
+      
+      setEditingCategory(null)
+      refetchCategories()
+    } catch (err: any) {
+      console.error('Error updating category:', err)
+      alert('Nie udało się zaktualizować kategorii: ' + err.message)
+    } finally {
+      setSavingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć tę kategorię? Wszystkie tematy w tej kategorii zostaną bez kategorii.')) {
+      return
+    }
+    
+    try {
+      // Sprawdź czy kategoria ma podkategorie
+      const children = getChildren(categoryId)
+      if (children.length > 0) {
+        alert('Nie można usunąć kategorii, która ma podkategorie. Usuń najpierw podkategorie.')
+        return
+      }
+
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', categoryId)
+      
+      if (error) throw error
+      refetchCategories()
+    } catch (err: any) {
+      console.error('Error deleting category:', err)
+      alert('Nie udało się usunąć kategorii: ' + err.message)
+    }
+  }
+
   // Grupuj kategorie według parent_id
   const rootCategories = categories.filter((c: any) => !c.parent_id)
   const getChildren = (parentId: string) => 
@@ -258,11 +313,11 @@ export default function Sidebar({ open }: SidebarProps) {
                 Kategorie
               </h3>
               <button 
-                onClick={() => setShowNewCategoryModal(true)}
+                onClick={() => setShowCategoriesModal(true)}
                 className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200"
-                title="Dodaj kategorię"
+                title="Zarządzaj kategoriami"
               >
-                <Plus className="w-4 h-4" />
+                <Settings className="w-3 h-3" />
               </button>
             </div>
             
@@ -414,6 +469,147 @@ export default function Sidebar({ open }: SidebarProps) {
                   {savingCategory ? 'Tworzenie...' : 'Utwórz'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal zarządzania kategoriami */}
+      {showCategoriesModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <h2 className="text-xl font-semibold text-slate-100">Zarządzaj kategoriami</h2>
+              <button
+                onClick={() => {
+                  setShowCategoriesModal(false)
+                  setEditingCategory(null)
+                }}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Dodaj nową kategorię */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-slate-300 mb-3">Dodaj nową kategorię</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Nazwa kategorii"
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg
+                             text-slate-100 placeholder-slate-400 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  />
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-shrink-0">
+                      <input
+                        type="color"
+                        value={newCategoryColor}
+                        onChange={(e) => setNewCategoryColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                      />
+                    </div>
+                    <button
+                      onClick={handleAddCategory}
+                      disabled={!newCategoryName.trim() || savingCategory}
+                      className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 rounded-lg font-medium text-sm"
+                    >
+                      {savingCategory ? 'Dodawanie...' : 'Dodaj kategorię'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista kategorii */}
+              <div>
+                <h3 className="text-sm font-medium text-slate-300 mb-3">Istniejące kategorie</h3>
+                <div className="space-y-2">
+                  {categories.map((category: any) => (
+                    <div 
+                      key={category.id}
+                      className="flex items-center gap-2 p-2 bg-slate-700/30 rounded-lg"
+                    >
+                      {editingCategory?.id === category.id ? (
+                        <>
+                          <input
+                            type="text"
+                            value={editingCategory.name}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                            className="flex-1 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100"
+                            autoFocus
+                          />
+                          <input
+                            type="color"
+                            value={editingCategory.color}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                            className="w-8 h-8 rounded cursor-pointer border-0"
+                          />
+                          <button
+                            onClick={handleUpdateCategory}
+                            disabled={savingCategory}
+                            className="p-1.5 text-green-400 hover:bg-slate-600 rounded"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingCategory(null)}
+                            className="p-1.5 text-slate-400 hover:bg-slate-600 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div 
+                            className="w-4 h-4 rounded flex-shrink-0" 
+                            style={{ backgroundColor: category.color || '#6B7280' }}
+                          />
+                          <span className="flex-1 text-sm text-slate-200">
+                            {category.name}
+                          </span>
+                          <button
+                            onClick={() => setEditingCategory({ ...category })}
+                            className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-600 rounded"
+                            title="Edytuj"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(category.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded"
+                            title="Usuń"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {categories.length === 0 && (
+                    <p className="text-slate-500 text-sm text-center py-4">
+                      Brak kategorii. Dodaj pierwszą kategorię powyżej.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-700">
+              <button
+                onClick={() => {
+                  setShowCategoriesModal(false)
+                  setEditingCategory(null)
+                }}
+                className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium"
+              >
+                Zamknij
+              </button>
             </div>
           </div>
         </div>
