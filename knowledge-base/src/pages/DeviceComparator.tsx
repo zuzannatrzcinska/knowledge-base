@@ -199,6 +199,14 @@ export default function DeviceComparator() {
 
   // Kolumny tabeli (główne parametry numeryczne)
   const tableSpecs = specs.filter(s => s.data_type === 'number').slice(0, 5)
+  
+  // Jeśli wyszukujemy konkretny parametr, dodaj go do kolumn (jeśli nie jest już tam)
+  const displayTableSpecs = useMemo(() => {
+    if (matchedSpec && !tableSpecs.find(s => s.key === matchedSpec.key)) {
+      return [matchedSpec, ...tableSpecs.slice(0, 4)]
+    }
+    return tableSpecs
+  }, [matchedSpec, tableSpecs])
 
   return (
     <div className="space-y-6">
@@ -487,8 +495,10 @@ export default function DeviceComparator() {
                     />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Nazwa</th>
-                  {tableSpecs.map(spec => (
-                    <th key={spec.key} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase whitespace-nowrap">
+                  {displayTableSpecs.map(spec => (
+                    <th key={spec.key} className={`px-4 py-3 text-left text-xs font-medium uppercase whitespace-nowrap ${
+                      matchedSpec?.key === spec.key ? 'text-purple-400 bg-purple-500/10' : 'text-slate-400'
+                    }`}>
                       {spec.label} {spec.unit && <span className="text-slate-500">({spec.unit})</span>}
                     </th>
                   ))}
@@ -517,8 +527,10 @@ export default function DeviceComparator() {
                           <span className="text-slate-500 text-sm ml-2">({device.model})</span>
                         )}
                       </td>
-                      {tableSpecs.map(spec => (
-                        <td key={spec.key} className="px-4 py-3 whitespace-nowrap text-slate-300">
+                      {displayTableSpecs.map(spec => (
+                        <td key={spec.key} className={`px-4 py-3 whitespace-nowrap ${
+                          matchedSpec?.key === spec.key ? 'text-purple-300 bg-purple-500/10 font-semibold' : 'text-slate-300'
+                        }`}>
                           {device.specs[spec.key] != null 
                             ? `${device.specs[spec.key]}` 
                             : <span className="text-slate-500">−</span>
@@ -526,9 +538,31 @@ export default function DeviceComparator() {
                         </td>
                       ))}
                       <td className="px-4 py-3">
-                        <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-sm">
-                          {featureCount} / {features.length}
-                        </span>
+                        {matchedFeature ? (
+                          // Jeśli wyszukiwana jest funkcja, pokaż tylko tę funkcję
+                          <div className="flex items-center gap-2">
+                            {device.features[matchedFeature.key] === true ? (
+                              <>
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20 text-green-400">
+                                  <Check className="w-4 h-4" />
+                                </span>
+                                <span className="text-sm text-slate-300">{matchedFeature.label}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/20 text-red-400">
+                                  <X className="w-4 h-4" />
+                                </span>
+                                <span className="text-sm text-slate-400">{matchedFeature.label}</span>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          // Normalnie pokaż licznik funkcji
+                          <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-sm">
+                            {featureCount} / {features.length}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
