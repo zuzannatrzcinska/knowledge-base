@@ -1,20 +1,24 @@
 // src/components/devices/DeviceDetailModal.tsx
-import { useMemo } from 'react'
 import { X, Edit, Watch, Check, Minus } from 'lucide-react'
-import { Device, DeviceFeature, DEVICE_SPECS } from '../../hooks/useDevices'
+import { Device, DeviceSpec, DeviceFeature } from '../../hooks/useDevices'
 
 interface Props {
   device: Device
+  specs: DeviceSpec[]
+  specsByCategory: Record<string, DeviceSpec[]>
   features: DeviceFeature[]
   featuresByCategory: Record<string, DeviceFeature[]>
   onClose: () => void
   onEdit: () => void
 }
 
-export default function DeviceDetailModal({ device, features, featuresByCategory, onClose, onEdit }: Props) {
-  // Liczenie funkcji
+const SPEC_CATEGORIES = ['Zasilanie', 'Pamięć', 'Fizyczne', 'Łączność', 'Wyświetlacz', 'Hardware', 'Inne']
+const FEATURE_CATEGORIES = ['Podstawowe', 'Lokalizacja', 'Komunikacja', 'Kontrola', 'Multimedia', 'Bezpieczeństwo', 'Zdrowie', 'Inne']
+
+export default function DeviceDetailModal({ device, specs, specsByCategory, features, featuresByCategory, onClose, onEdit }: Props) {
   const totalFeatures = features.length
-  const activeFeatures = features.filter(f => device[f.key]).length
+  const activeFeatures = Object.values(device.features).filter(Boolean).length
+  const filledSpecs = Object.entries(device.specs).filter(([_, v]) => v != null && v !== '').length
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -49,12 +53,15 @@ export default function DeviceDetailModal({ device, features, featuresByCategory
             <p className="text-slate-300">{device.description}</p>
           )}
 
-          {/* Category & Stats */}
+          {/* Stats */}
           <div className="flex flex-wrap gap-3">
             <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm capitalize">
               {device.category}
             </span>
             <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
+              {filledSpecs} parametrów
+            </span>
+            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">
               {activeFeatures}/{totalFeatures} funkcji
             </span>
           </div>
@@ -65,22 +72,24 @@ export default function DeviceDetailModal({ device, features, featuresByCategory
               Parametry techniczne
             </h3>
             <div className="bg-slate-700/20 rounded-lg divide-y divide-slate-700/50">
-              {Object.entries(DEVICE_SPECS).map(([key, spec]) => {
-                const value = device[key]
-                if (value == null && value !== 0) return null
-                return (
-                  <div key={key} className="flex justify-between py-3 px-4">
+              {SPEC_CATEGORIES.map(category => {
+                const catSpecs = specsByCategory[category]
+                if (!catSpecs) return null
+                
+                const filledInCat = catSpecs.filter(s => device.specs[s.key] != null && device.specs[s.key] !== '')
+                if (filledInCat.length === 0) return null
+
+                return filledInCat.map(spec => (
+                  <div key={spec.key} className="flex justify-between py-3 px-4">
                     <span className="text-slate-400">{spec.label}</span>
                     <span className="text-slate-200 font-medium">
-                      {value}{spec.unit ? ` ${spec.unit}` : ''}
+                      {device.specs[spec.key]}{spec.unit ? ` ${spec.unit}` : ''}
                     </span>
                   </div>
-                )
+                ))
               })}
-              {Object.entries(DEVICE_SPECS).every(([key]) => device[key] == null) && (
-                <div className="py-3 px-4 text-slate-500 text-center">
-                  Brak danych technicznych
-                </div>
+              {filledSpecs === 0 && (
+                <div className="py-3 px-4 text-slate-500 text-center">Brak danych technicznych</div>
               )}
             </div>
           </div>
@@ -90,19 +99,21 @@ export default function DeviceDetailModal({ device, features, featuresByCategory
             <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
               Funkcje urządzenia
             </h3>
-            
-            {Object.entries(featuresByCategory).map(([category, catFeatures]) => {
-              const activeInCategory = catFeatures.filter(f => device[f.key]).length
-              if (activeInCategory === 0) return null
-              
+
+            {FEATURE_CATEGORIES.map(category => {
+              const catFeatures = featuresByCategory[category]
+              if (!catFeatures) return null
+
+              const activeInCat = catFeatures.filter(f => device.features[f.key])
+              if (activeInCat.length === 0) return null
+
               return (
                 <div key={category} className="mb-4">
-                  <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    {category}
-                    <span className="text-cyan-400">({activeInCategory})</span>
+                  <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                    {category} <span className="text-cyan-400">({activeInCat.length})</span>
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {catFeatures.filter(f => device[f.key]).map((feature) => (
+                    {activeInCat.map(feature => (
                       <div key={feature.key} className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg">
                         <Check className="w-4 h-4 text-green-400" />
                         <span className="text-slate-200 text-sm">{feature.label}</span>
@@ -120,7 +131,7 @@ export default function DeviceDetailModal({ device, features, featuresByCategory
                   Pokaż brakujące funkcje ({totalFeatures - activeFeatures})
                 </summary>
                 <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {features.filter(f => !device[f.key]).map((feature) => (
+                  {features.filter(f => !device.features[f.key]).map(feature => (
                     <div key={feature.key} className="flex items-center gap-2 p-2 bg-slate-700/30 rounded-lg">
                       <Minus className="w-4 h-4 text-slate-500" />
                       <span className="text-slate-500 text-sm">{feature.label}</span>
@@ -134,9 +145,7 @@ export default function DeviceDetailModal({ device, features, featuresByCategory
           {/* Notatki */}
           {device.notes && (
             <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
-                Notatki
-              </h3>
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">Notatki</h3>
               <div className="bg-slate-700/20 rounded-lg p-4">
                 <p className="text-slate-300 whitespace-pre-wrap">{device.notes}</p>
               </div>
